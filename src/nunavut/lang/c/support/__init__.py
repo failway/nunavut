@@ -1,24 +1,22 @@
 #
-# Copyright (C) OpenCyphal Development Team  <opencyphal.org>
-# Copyright Amazon.com Inc. or its affiliates.
-# SPDX-License-Identifier: MIT
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
+# This software is distributed under the terms of the MIT License.
 #
 """
 Contains supporting C headers to distribute with generated types.
 """
 import pathlib
 import typing
-
-from nunavut._utilities import ResourceType, empty_list_support_files, iter_package_resources
+from nunavut._utilities import iter_package_resources
 
 __version__ = "1.0.0"
 """Version of the c support headers."""
 
 
-def list_support_files(resource_type: ResourceType = ResourceType.ANY) -> typing.Generator[pathlib.Path, None, None]:
+def list_support_files() -> typing.Generator[pathlib.Path, None, None]:
     """
     Get a list of C support headers embedded in this package.
-    :param resource_type: A type of support file to list.
 
     .. invisible-code-block: python
 
@@ -39,8 +37,4 @@ def list_support_files(resource_type: ResourceType = ResourceType.ANY) -> typing
 
     :return: A list of C support header resources.
     """
-    # The c support only has serialization support resources
-    if resource_type not in (ResourceType.ANY, ResourceType.SERIALIZATION_SUPPORT):
-        return empty_list_support_files()
-    else:
-        return iter_package_resources(__name__, ".h", ".j2")
+    return iter_package_resources(__name__, ".h", ".j2")

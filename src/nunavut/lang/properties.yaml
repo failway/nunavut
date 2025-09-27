@@ -1,8 +1,8 @@
 %YAML 1.2
 #
-# Copyright (C) OpenCyphal Development Team  <opencyphal.org>
-# Copyright Amazon.com Inc. or its affiliates.
-# SPDX-License-Identifier: MIT
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright (C) 2018-2021  UAVCAN Development Team  <uavcan.org>
+# This software is distributed under the terms of the MIT License.
 #
 ---
 nunavut.lang.c:
@@ -194,7 +194,6 @@ nunavut.lang.c:
         - defined
         - __has_include
         - __has_cpp_attribute
-        - pascal
     token_encoding_rules_by_identifier_type:
         all:
             - '\s+'
@@ -267,6 +266,7 @@ nunavut.lang.cpp:
         all:
             - '^\d{1}'
             - '^_[A-Z]'
+        macro: *nunavut_lang_c_reserved_token_patterns_by_type_macro
     whitespace_encoding_char: "_"
     collapse_whitespace_when_encoding: true
     enable_stropping: true
@@ -312,37 +312,9 @@ nunavut.lang.cpp:
         enable_serialization_asserts: false
         enable_override_variable_array_capacity: false
         std: c++14
-        std_flavor: std
+        variable_array_type: "std::vector<{TYPE},std::allocator<{TYPE}>>"
         cast_format: "static_cast<{type}>({value})"
-        # Provide non-empty values to override the type used for variable-length arrays in C++ types.
-        variable_array_type_include: "<vector>"
-        variable_array_type_template: "std::vector<{TYPE}>"
-        variable_array_type_constructor_args: ""
-        allocator_include: ""
-        allocator_type: ""
-        allocator_is_default_constructible: true
-        ctor_convention: "default"
-    defaults:
-        cetl++14-17:
-            std: c++14
-            std_flavor: cetl
-            variable_array_type_include: '"cetl/variable_length_array.hpp"'
-            variable_array_type_template: "cetl::VariableLengthArray<{TYPE}, {REBIND_ALLOCATOR}>"
-            variable_array_type_constructor_args: "{MAX_SIZE}"
-            allocator_include: '"cetl/pf17/sys/memory_resource.hpp"'
-            allocator_type: "cetl::pf17::pmr::polymorphic_allocator"
-            allocator_is_default_constructible: false
-            ctor_convention: "uses-trailing-allocator"
-        c++17-pmr:
-            std: c++17
-            std_flavor: pmr
-            variable_array_type_include: "<vector>"
-            variable_array_type_template: "std::vector<{TYPE}, {REBIND_ALLOCATOR}>"
-            variable_array_type_constructor_args: ""
-            allocator_include: "<memory_resource>"
-            allocator_type: "std::pmr::polymorphic_allocator"
-            allocator_is_default_constructible: true
-            ctor_convention: "uses-trailing-allocator"
+        enable_allocator_support: false
 
 
 nunavut.lang.py:
@@ -359,8 +331,6 @@ nunavut.lang.py:
     enable_stropping: true
     encoding_prefix: zX
     stropping_suffix: _
-    limit_empty_lines: 1
-    trim_trailing_whitespace: true
 
 nunavut.lang.js:
     extension: .js

@@ -12,8 +12,8 @@ else()
 endif()
 
 include_directories(
-    SYSTEM ${GOOGLETEST_SUBMODULE}/googletest/include
-    SYSTEM ${GOOGLETEST_SUBMODULE}/googlemock/include
+    ${GOOGLETEST_SUBMODULE}/googletest/include
+    ${GOOGLETEST_SUBMODULE}/googlemock/include
 )
 
 add_library(gmock_main STATIC EXCLUDE_FROM_ALL
@@ -23,19 +23,15 @@ add_library(gmock_main STATIC EXCLUDE_FROM_ALL
 )
 
 target_include_directories(gmock_main PRIVATE
-            SYSTEM ${GOOGLETEST_SUBMODULE}/googletest
-            SYSTEM ${GOOGLETEST_SUBMODULE}/googlemock
+                           ${GOOGLETEST_SUBMODULE}/googletest
+                           ${GOOGLETEST_SUBMODULE}/googlemock
 )
 
-target_compile_options(gmock_main PRIVATE
-                       "-Wno-error"  # Third-party code is not our responsibility.
+target_compile_options(gmock_main PUBLIC
                        "-Wno-switch-enum"
                        "-Wno-zero-as-null-pointer-constant"
                        "-Wno-missing-declarations"
                        "-Wno-sign-conversion"
-                       "-Wno-double-promotion"
-                       "-Wno-float-equal"
-                       "-Wno-conversion"
                        "-DGTEST_HAS_PTHREAD=0"
                        "${NUNAVUT_VERIFICATION_EXTRA_COMPILE_CFLAGS}"
                        )

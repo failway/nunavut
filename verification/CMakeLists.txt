@@ -1,10 +1,9 @@
 #
-# Copyright (C) OpenCyphal Development Team  <opencyphal.org>
-# Copyright Amazon.com Inc. or its affiliates.
-# SPDX-License-Identifier: MIT
+# Copyright (C) 2014 Pavel Kirienko <pavel.kirienko@gmail.com>
+# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 
-cmake_minimum_required(VERSION 3.22.0)
+cmake_minimum_required(VERSION 3.10.0)
 
 project(nunavut_verification C CXX)
 
@@ -37,35 +36,11 @@ else()
      set(NUNAVUT_VERIFICATION_LANG "unspecified" CACHE STRING "The Nunavut output language to verify.")
 endif()
 
-if (NUNAVUT_VERIFICATION_LANG STREQUAL "cpp")
-    set(NUNAVUT_VERIFICATION_ROOT "${CMAKE_SOURCE_DIR}/cpp")
-    message(STATUS "NUNAVUT_VERIFICATION_LANG is C++ (${NUNAVUT_VERIFICATION_LANG})")
-    message(STATUS "Setting NUNAVUT_VERIFICATION_ROOT = ${NUNAVUT_VERIFICATION_ROOT}")
-elseif(NUNAVUT_VERIFICATION_LANG STREQUAL "c")
-    set(NUNAVUT_VERIFICATION_ROOT "${CMAKE_SOURCE_DIR}/c")
-    message(STATUS "NUNAVUT_VERIFICATION_LANG is C (${NUNAVUT_VERIFICATION_LANG})")
-    message(STATUS "Setting NUNAVUT_VERIFICATION_ROOT = ${NUNAVUT_VERIFICATION_ROOT}")
-else()
-    message(FATAL_ERROR "Unknown or no verification language (${NUNAVUT_VERIFICATION_LANG}). Try cmake -DNUNAVUT_VERIFICATION_LANG:string=[cpp|c]")
-endif()
-
-string(TOLOWER ${NUNAVUT_VERIFICATION_LANG} LOCAL_VERIFICATION_LANG)
-
 set(NUNAVUT_SUBMODULES_ROOT "${NUNAVUT_PROJECT_ROOT}/submodules" CACHE STRING "The path to git submodules for the project.")
 
 if(NOT DEFINED NUNAVUT_VERIFICATION_LANG_STANDARD)
-     set(NUNAVUT_VERIFICATION_LANG_STANDARD "c++20" CACHE STRING "A language standard for languages that support this concept.")
+     set(NUNAVUT_VERIFICATION_LANG_STANDARD "" CACHE STRING "A language standard for languages that support this concept.")
 endif()
-# Ensure NUNAVUT_VERIFICATION_LANG_STANDARD has a default
-if (NUNAVUT_VERIFICATION_LANG STREQUAL "cpp" AND NOT NUNAVUT_VERIFICATION_LANG_STANDARD)
-     set(NUNAVUT_VERIFICATION_LANG_STANDARD "c++20")
-endif()
-
-if (NUNAVUT_VERIFICATION_LANG STREQUAL "c" AND NOT NUNAVUT_VERIFICATION_LANG_STANDARD)
-     set(NUNAVUT_VERIFICATION_LANG_STANDARD "c11")
-endif()
-
-message(STATUS "NUNAVUT_VERIFICATION_LANG_STANDARD is ${NUNAVUT_VERIFICATION_LANG_STANDARD}")
 
 if(NOT DEFINED NUNAVUT_VERIFICATION_TARGET_ENDIANNESS)
      set(NUNAVUT_VERIFICATION_TARGET_ENDIANNESS "any" CACHE STRING "The endianess for the target verification architecture.")
@@ -83,6 +58,18 @@ if(NOT DEFINED NUNAVUT_VERIFICATION_OVR_VAR_ARRAY_ENABLE)
      set(NUNAVUT_VERIFICATION_OVR_VAR_ARRAY_ENABLE OFF CACHE BOOL "Enable or disable override variable array capacity in generated support code.")
 endif()
 
+if (NUNAVUT_VERIFICATION_LANG STREQUAL "cpp")
+    set(NUNAVUT_VERIFICATION_ROOT "${CMAKE_SOURCE_DIR}/cpp")
+    message(STATUS "NUNAVUT_VERIFICATION_LANG is C++ (${NUNAVUT_VERIFICATION_LANG})")
+    message(STATUS "Setting NUNAVUT_VERIFICATION_ROOT = ${NUNAVUT_VERIFICATION_ROOT}")
+elseif(NUNAVUT_VERIFICATION_LANG STREQUAL "c")
+    set(NUNAVUT_VERIFICATION_ROOT "${CMAKE_SOURCE_DIR}/c")
+    message(STATUS "NUNAVUT_VERIFICATION_LANG is C (${NUNAVUT_VERIFICATION_LANG})")
+    message(STATUS "Setting NUNAVUT_VERIFICATION_ROOT = ${NUNAVUT_VERIFICATION_ROOT}")
+else()
+    message(FATAL_ERROR "Unknown or no verification language (${NUNAVUT_VERIFICATION_LANG}). Try cmake -DNUNAVUT_VERIFICATION_LANG:string=[cpp|c]")
+endif()
+
 if(DEFINED ENV{NUNAVUT_FLAGSET})
     set(NUNAVUT_FLAGSET "$ENV{NUNAVUT_FLAGSET}")
     message(STATUS "Using ${NUNAVUT_FLAGSET} from environment for NUNAVUT_FLAGSET")
@@ -92,7 +79,6 @@ else()
     set(NUNAVUT_FLAGSET "${CMAKE_SOURCE_DIR}/cmake/compiler_flag_sets/native_w_cov.cmake")
     message(STATUS "Setting (default) NUNAVUT_FLAGSET = ${NUNAVUT_FLAGSET}")
 endif()
-include("${NUNAVUT_FLAGSET}")
 
 #
 # Tell cmake where to find our custom scripts.
@@ -115,6 +101,22 @@ set(NUNAVUT_VERIFICATIONS_BINARY_DIR ${CMAKE_BINARY_DIR}/suite)
 file(WRITE ${NUNAVUT_VERIFICATIONS_BINARY_DIR}/README.txt
      "All test binaries and output will appear under here.")
 
+#
+# Handle other inputs that translate to compiler flags.
+#
+set(NUNAVUT_VERIFICATION_EXTRA_COMPILE_CFLAGS "")
+
+if(DEFINED NUNAVUT_VERIFICATION_TARGET_PLATFORM)
+     if(${NUNAVUT_VERIFICATION_TARGET_PLATFORM} STREQUAL "native32")
+          list(APPEND NUNAVUT_VERIFICATION_EXTRA_COMPILE_CFLAGS "-m32")
+          message(STATUS "Configuring for native32 platform.")
+     elseif(${NUNAVUT_VERIFICATION_TARGET_PLATFORM} STREQUAL "native64")
+          list(APPEND NUNAVUT_VERIFICATION_EXTRA_COMPILE_CFLAGS "-m64")
+          message(STATUS "Configuring for native64 platform.")
+     else()
+          message(FATAL_ERROR "\"${NUNAVUT_VERIFICATION_TARGET_PLATFORM}\" is not a supported value.")
+     endif()
+endif()
 
 # +---------------------------------------------------------------------------+
 # | BUILD ENVIRONMENT
@@ -127,7 +129,7 @@ find_package(lcov REQUIRED)
 find_package(genhtml REQUIRED)
 
 #
-# We need tox to enable a reproducible python environment.
+# We need tox to enable a reproducable python environment.
 #
 find_package(tox REQUIRED)
 
@@ -165,7 +167,7 @@ find_package(o1heap REQUIRED)
 create_dsdl_target(nunavut-support
                    ${NUNAVUT_VERIFICATION_LANG}
                    "${NUNAVUT_VERIFICATION_LANG_STANDARD}"
-                   ${NUNAVUT_GENERATED_ROOT}/${NUNAVUT_VERIFICATION_LANG}/default
+                   ${NUNAVUT_GENERATED_ROOT}/${NUNAVUT_VERIFICATION_LANG}
                    ""
                    OFF
                    ${NUNAVUT_VERIFICATION_SER_ASSERT}
@@ -176,12 +178,12 @@ create_dsdl_target(nunavut-support
                    "only")
 
 #
-# Generate types for the Cyphal v1 public_regulated_data_types set.
+# Generate types for the UAVCAN v1 public_regulated_data_types set.
 #
 create_dsdl_target(dsdl-regulated
                    ${NUNAVUT_VERIFICATION_LANG}
                    "${NUNAVUT_VERIFICATION_LANG_STANDARD}"
-                   ${NUNAVUT_GENERATED_ROOT}/${NUNAVUT_VERIFICATION_LANG}/default
+                   ${NUNAVUT_GENERATED_ROOT}/${NUNAVUT_VERIFICATION_LANG}
                    ${NUNAVUT_SUBMODULES_ROOT}/public_regulated_data_types/uavcan
                    OFF
                    ${NUNAVUT_VERIFICATION_SER_ASSERT}
@@ -199,7 +201,7 @@ add_dependencies(dsdl-regulated nunavut-support)
 create_dsdl_target(dsdl-test
                    ${NUNAVUT_VERIFICATION_LANG}
                    "${NUNAVUT_VERIFICATION_LANG_STANDARD}"
-                   ${NUNAVUT_GENERATED_ROOT}/${NUNAVUT_VERIFICATION_LANG}/default
+                   ${NUNAVUT_GENERATED_ROOT}/${NUNAVUT_VERIFICATION_LANG}
                    ${CMAKE_SOURCE_DIR}/nunavut_test_types/test0/regulated
                    OFF
                    ${NUNAVUT_VERIFICATION_SER_ASSERT}
@@ -212,11 +214,16 @@ create_dsdl_target(dsdl-test
 
 add_dependencies(dsdl-test nunavut-support)
 
-if(LOCAL_VERIFICATION_LANG STREQUAL "cpp")
-     # C++ tests including going back and forth between c and c++. We include
-     # c serialization support when verifying c++ for this reason. Future versions of this
-     # verification build might make this more generic allowing any language to test interoperability
-     # with any other language.
+# +---------------------------------------------------------------------------+
+# | FLAG SETS
+# +---------------------------------------------------------------------------+
+string(TOLOWER ${NUNAVUT_VERIFICATION_LANG} LOCAL_VERIFICATION_LANG)
+
+if (LOCAL_VERIFICATION_LANG STREQUAL "c")
+     set(LOCAL_VERIFICATION_LANG_STANDARD_C "${NUNAVUT_VERIFICATION_LANG_STANDARD}")
+     set(LOCAL_VERIFICATION_LANG_STANDARD_CXX "")
+     list(APPEND LOCAL_ADDITIONAL_DSDL_LIBS "")
+elseif(LOCAL_VERIFICATION_LANG STREQUAL "cpp")
      set(LOCAL_VERIFICATION_LANG_STANDARD_C "")
      set(LOCAL_VERIFICATION_LANG_STANDARD_CXX "${NUNAVUT_VERIFICATION_LANG_STANDARD}")
      list(APPEND LOCAL_ADDITIONAL_DSDL_LIBS dsdl-regulated-c dsdl-test-c)
@@ -226,7 +233,7 @@ if(LOCAL_VERIFICATION_LANG STREQUAL "cpp")
      create_dsdl_target(nunavut-support-c
                         "c"
                         "${NUNAVUT_VERIFICATION_LANG_STANDARD}"
-                        ${NUNAVUT_GENERATED_ROOT}/${NUNAVUT_VERIFICATION_LANG}/default
+                        ${NUNAVUT_GENERATED_ROOT}/${NUNAVUT_VERIFICATION_LANG}
                         ""
                         OFF
                         ${NUNAVUT_VERIFICATION_SER_ASSERT}
@@ -237,12 +244,12 @@ if(LOCAL_VERIFICATION_LANG STREQUAL "cpp")
                         "only")
 
      #
-     # Generate types for the Cyphal v1 public_regulated_data_types set.
+     # Generate types for the UAVCAN v1 public_regulated_data_types set.
      #
      create_dsdl_target(dsdl-regulated-c
                         "c"
                         "${NUNAVUT_VERIFICATION_LANG_STANDARD}"
-                        ${NUNAVUT_GENERATED_ROOT}/${NUNAVUT_VERIFICATION_LANG}/default
+                        ${NUNAVUT_GENERATED_ROOT}/${NUNAVUT_VERIFICATION_LANG}
                         ${NUNAVUT_SUBMODULES_ROOT}/public_regulated_data_types/uavcan
                         OFF
                         ${NUNAVUT_VERIFICATION_SER_ASSERT}
@@ -260,7 +267,7 @@ if(LOCAL_VERIFICATION_LANG STREQUAL "cpp")
      create_dsdl_target(dsdl-test-c
                         "c"
                         "${NUNAVUT_VERIFICATION_LANG_STANDARD}"
-                        ${NUNAVUT_GENERATED_ROOT}/${NUNAVUT_VERIFICATION_LANG}/default
+                        ${NUNAVUT_GENERATED_ROOT}/${NUNAVUT_VERIFICATION_LANG}
                         ${CMAKE_SOURCE_DIR}/nunavut_test_types/test0/regulated
                         OFF
                         ${NUNAVUT_VERIFICATION_SER_ASSERT}
@@ -272,63 +279,23 @@ if(LOCAL_VERIFICATION_LANG STREQUAL "cpp")
                         ${NUNAVUT_SUBMODULES_ROOT}/public_regulated_data_types/uavcan)
 
      add_dependencies(dsdl-test-c nunavut-support-c)
-endif()
-
-
-if(NUNAVUT_VERIFICATION_LANG_STANDARD STREQUAL "cetl++14-17" OR NUNAVUT_VERIFICATION_LANG_STANDARD STREQUAL "c++17-pmr")
-     #
-     # Generate serialization support headers with config matching the language standard
-     #
-     create_dsdl_target(nunavut-support-array-with-allocator
-                    ${NUNAVUT_VERIFICATION_LANG}
-                    "${NUNAVUT_VERIFICATION_LANG_STANDARD}"
-                    ${NUNAVUT_GENERATED_ROOT}/${NUNAVUT_VERIFICATION_LANG}/array-with-allocator
-                    ""
-                    OFF
-                    ${NUNAVUT_VERIFICATION_SER_ASSERT}
-                    ${NUNAVUT_VERIFICATION_SER_FP_DISABLE}
-                    ${NUNAVUT_VERIFICATION_OVR_VAR_ARRAY_ENABLE}
-                    ON
-                    "${NUNAVUT_VERIFICATION_TARGET_ENDIANNESS}"
-                    "only")
-
-     #
-     # Generate additional types with config matching the language standard
-     #
-     create_dsdl_target(dsdl-test-array-with-allocator
-                    ${NUNAVUT_VERIFICATION_LANG}
-                    "${NUNAVUT_VERIFICATION_LANG_STANDARD}"
-                    ${NUNAVUT_GENERATED_ROOT}/${NUNAVUT_VERIFICATION_LANG}/array-with-allocator
-                    ${CMAKE_SOURCE_DIR}/nunavut_test_types/nested_array_types/mymsgs
-                    OFF
-                    ${NUNAVUT_VERIFICATION_SER_ASSERT}
-                    ${NUNAVUT_VERIFICATION_SER_FP_DISABLE}
-                    ${NUNAVUT_VERIFICATION_OVR_VAR_ARRAY_ENABLE}
-                    ON
-                    "${NUNAVUT_VERIFICATION_TARGET_ENDIANNESS}"
-                    "never"
-                    ${NUNAVUT_SUBMODULES_ROOT}/public_regulated_data_types/uavcan)
-
-     add_dependencies(dsdl-test-array-with-allocator nunavut-support-array-with-allocator)
-endif()
-
-# +---------------------------------------------------------------------------+
-# | FLAG SETS
-# +---------------------------------------------------------------------------+
-
-if (LOCAL_VERIFICATION_LANG STREQUAL "c")
-     set(LOCAL_VERIFICATION_LANG_STANDARD_C "${NUNAVUT_VERIFICATION_LANG_STANDARD}")
-     set(LOCAL_VERIFICATION_LANG_STANDARD_CXX "")
-     list(APPEND LOCAL_ADDITIONAL_DSDL_LIBS "")
-elseif(LOCAL_VERIFICATION_LANG STREQUAL "cpp")
-     set(LOCAL_VERIFICATION_LANG_STANDARD_C "")
-     set(LOCAL_VERIFICATION_LANG_STANDARD_CXX "${NUNAVUT_VERIFICATION_LANG_STANDARD}")
-     list(APPEND LOCAL_ADDITIONAL_DSDL_LIBS "")
+elseif(NOT NUNAVUT_VERIFICATION_LANG_STANDARD STREQUAL "")
+     message(FATAL_ERROR "NUNAVUT_VERIFICATION_LANG_STANDARD was set to ${NUNAVUT_VERIFICATION_LANG_STANDARD} but "
+                         "NUNAVUT_VERIFICATION_LANG language was ${NUNAVUT_VERIFICATION_LANG} which does not "
+                         "support this option")
 else()
     set(LOCAL_VERIFICATION_LANG_STANDARD_C "")
     set(LOCAL_VERIFICATION_LANG_STANDARD_CXX "")
     list(APPEND LOCAL_ADDITIONAL_DSDL_LIBS "")
 endif()
+
+#
+# Load all our compile flag sets into the appropriate places.
+#
+apply_flag_set("${NUNAVUT_FLAGSET}"
+               "${LOCAL_VERIFICATION_LANG_STANDARD_C}"
+               "${LOCAL_VERIFICATION_LANG_STANDARD_CXX}")
+
 
 # +---------------------------------------------------------------------------+
 # | VERIFICATION SUITE
@@ -336,6 +303,17 @@ endif()
 #   We generate individual test binaires so we can record which test generated
 #   what coverage. We also allow test authors to generate coverage reports for
 #   just one test allowing for faster iteration.
+file(GLOB NATIVE_TESTS_CPP
+     LIST_DIRECTORIES false
+     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+     ${NUNAVUT_VERIFICATION_ROOT}/suite/test_*.cpp
+)
+
+file(GLOB NATIVE_TESTS_C
+     LIST_DIRECTORIES false
+     RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
+     ${NUNAVUT_VERIFICATION_ROOT}/suite/test_*.c
+)
 
 add_custom_target(
      lcov_zero
@@ -350,106 +328,58 @@ set(ALL_TESTS "")
 set(ALL_TESTS_WITH_LCOV "")
 set(ALL_TEST_COVERAGE "")
 
-function(runTestCpp)
-    set(options "")
-    set(oneValueArgs TEST_FILE)
-    set(multiValueArgs LINK LANGUAGE_FLAVORS)
-    cmake_parse_arguments(runTestCpp "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-    # Skip tests not relevant to the specified language standard
-    list(FIND runTestCpp_LANGUAGE_FLAVORS "${NUNAVUT_VERIFICATION_LANG_STANDARD}" FIND_INDEX)
-    if (${FIND_INDEX} EQUAL -1)
-        message(STATUS "Skipping ${runTestCpp_TEST_FILE}")
-        return()
-    endif()
-
-    set(NATIVE_TEST "${NUNAVUT_VERIFICATION_LANG}/suite/${runTestCpp_TEST_FILE}")
+foreach(NATIVE_TEST ${NATIVE_TESTS_CPP})
     get_filename_component(NATIVE_TEST_NAME ${NATIVE_TEST} NAME_WE)
+    set(${NATIVE_TEST_NAME}_CPP_EXTRA_FLAGS, "")
+    list(APPEND ${NATIVE_TEST_NAME}_CPP_EXTRA_FLAGS ${NUNAVUT_VERIFICATION_EXTRA_COMPILE_CFLAGS})
 
-    define_native_unit_test(FRAMEWORK "gtest"
-                            TEST_NAME ${NATIVE_TEST_NAME}
-                            TEST_SOURCE ${NATIVE_TEST}
-                            OUTDIR ${NUNAVUT_VERIFICATIONS_BINARY_DIR}
-                            DSDL_TARGETS
-                                ${runTestCpp_LINK}
-                                ${LOCAL_ADDITIONAL_DSDL_LIBS}
-    )
     if(NUNAVUT_VERIFICATION_LANG STREQUAL "c")
-        #
-        # If we are testing C headers with C++ tests we have to disable
-        # certain checks to allow the inline code to compile without
-        # warnings.
-        #
-        target_compile_options(${NATIVE_TEST_NAME} PRIVATE "-Wno-old-style-cast")
+          #
+          # If we are testing C headers with C++ tests we have to disable
+          # certain checks to allow the inline code to compile without
+          # warnings.
+          #
+          list(APPEND ${NATIVE_TEST_NAME}_CPP_EXTRA_FLAGS "-Wno-old-style-cast")
     endif()
-    target_link_libraries(${NATIVE_TEST_NAME} PUBLIC o1heap)
-    target_include_directories(${NATIVE_TEST_NAME} PUBLIC "${NUNAVUT_PROJECT_ROOT}/submodules/CETL/include")
-    define_native_test_run(TEST_NAME ${NATIVE_TEST_NAME} OUTDIR ${NUNAVUT_VERIFICATIONS_BINARY_DIR})
+
+    define_native_unit_test("gtest"
+                            ${NATIVE_TEST_NAME}
+                            ${NATIVE_TEST}
+                            ${NUNAVUT_VERIFICATIONS_BINARY_DIR}
+                            "${${NATIVE_TEST_NAME}_CPP_EXTRA_FLAGS}"
+                            dsdl-regulated
+                            dsdl-test
+                            ${LOCAL_ADDITIONAL_DSDL_LIBS}
+                            o1heap)
+    define_native_test_run(${NATIVE_TEST_NAME} ${NUNAVUT_VERIFICATIONS_BINARY_DIR})
     define_native_test_run_with_lcov(${NATIVE_TEST_NAME} ${NUNAVUT_VERIFICATIONS_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/\\*)
-    define_native_test_coverage(${NATIVE_TEST_NAME} ${NUNAVUT_VERIFICATIONS_BINARY_DIR})
+    define_natve_test_coverage(${NATIVE_TEST_NAME} ${NUNAVUT_VERIFICATIONS_BINARY_DIR})
     list(APPEND ALL_TESTS "run_${NATIVE_TEST_NAME}")
     list(APPEND ALL_TESTS_WITH_LCOV "run_${NATIVE_TEST_NAME}_with_lcov")
     list(APPEND ALL_TEST_COVERAGE "--add-tracefile")
     list(APPEND ALL_TEST_COVERAGE "${NUNAVUT_VERIFICATIONS_BINARY_DIR}/coverage.${NATIVE_TEST_NAME}.filtered.info")
-    set(ALL_TESTS ${ALL_TESTS} PARENT_SCOPE)
-    set(ALL_TESTS_WITH_LCOV ${ALL_TESTS_WITH_LCOV} PARENT_SCOPE)
-    set(ALL_TEST_COVERAGE ${ALL_TEST_COVERAGE} PARENT_SCOPE)
-endfunction()
+endforeach()
 
-if (NUNAVUT_VERIFICATION_LANG STREQUAL "cpp")
-     runTestCpp(TEST_FILE test_array_c++17-pmr.cpp   LINK dsdl-test-array-with-allocator LANGUAGE_FLAVORS                         c++17-pmr      )
-     runTestCpp(TEST_FILE test_array_cetl++14-17.cpp LINK dsdl-test-array-with-allocator LANGUAGE_FLAVORS       cetl++14-17                      )
-     runTestCpp(TEST_FILE test_bitarray.cpp          LINK dsdl-regulated dsdl-test       LANGUAGE_FLAVORS c++14             c++17 c++17-pmr c++20)
-     runTestCpp(TEST_FILE test_compiles.cpp          LINK dsdl-regulated dsdl-test       LANGUAGE_FLAVORS c++14             c++17 c++17-pmr c++20)
-     runTestCpp(TEST_FILE test_large_bitset.cpp      LINK dsdl-regulated dsdl-test       LANGUAGE_FLAVORS c++14             c++17 c++17-pmr c++20)
-     runTestCpp(TEST_FILE test_serialization.cpp     LINK dsdl-regulated dsdl-test       LANGUAGE_FLAVORS c++14             c++17 c++17-pmr c++20)
-     runTestCpp(TEST_FILE test_unionant.cpp          LINK dsdl-regulated dsdl-test       LANGUAGE_FLAVORS c++14             c++17 c++17-pmr c++20)
-endif()
-
-function(runTestC)
-    set(options "")
-    set(oneValueArgs TEST_FILE FRAMEWORK)
-    set(multiValueArgs LINK LANGUAGE_FLAVORS)
-    cmake_parse_arguments(runTestC "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-    # Skip tests not relevant to the specified language standard
-    list(FIND runTestC_LANGUAGE_FLAVORS "${NUNAVUT_VERIFICATION_LANG_STANDARD}" FIND_INDEX)
-    if (${FIND_INDEX} EQUAL -1)
-        message(STATUS "Skipping ${runTestC_TEST_FILE}")
-        return()
-    endif()
-
-    set(NATIVE_TEST "${NUNAVUT_VERIFICATION_ROOT}/suite/${runTestC_TEST_FILE}")
+foreach(NATIVE_TEST ${NATIVE_TESTS_C})
     get_filename_component(NATIVE_TEST_NAME ${NATIVE_TEST} NAME_WE)
+    set(${NATIVE_TEST_NAME}_C_EXTRA_FLAGS, "")
+    list(APPEND ${NATIVE_TEST_NAME}_C_EXTRA_FLAGS ${NUNAVUT_VERIFICATION_EXTRA_COMPILE_CFLAGS})
 
-    define_native_unit_test(FRAMEWORK ${runTestC_FRAMEWORK}
-                            TEST_NAME ${NATIVE_TEST_NAME}
-                            TEST_SOURCE ${NATIVE_TEST}
-                            OUTDIR ${NUNAVUT_VERIFICATIONS_BINARY_DIR}
-                            DSDL_TARGETS
-                                ${runTestC_LINK}
-    )
-    define_native_test_run(TEST_NAME ${NATIVE_TEST_NAME} OUTDIR ${NUNAVUT_VERIFICATIONS_BINARY_DIR})
+    define_native_unit_test("unity"
+                            ${NATIVE_TEST_NAME}
+                            ${NATIVE_TEST}
+                            ${NUNAVUT_VERIFICATIONS_BINARY_DIR}
+                            "${${NATIVE_TEST_NAME}_C_EXTRA_FLAGS}"
+                            dsdl-regulated
+                            dsdl-test)
+    define_native_test_run(${NATIVE_TEST_NAME} ${NUNAVUT_VERIFICATIONS_BINARY_DIR})
     define_native_test_run_with_lcov(${NATIVE_TEST_NAME} ${NUNAVUT_VERIFICATIONS_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/\\*)
-    define_native_test_coverage(${NATIVE_TEST_NAME} ${NUNAVUT_VERIFICATIONS_BINARY_DIR})
+    define_natve_test_coverage(${NATIVE_TEST_NAME} ${NUNAVUT_VERIFICATIONS_BINARY_DIR})
     list(APPEND ALL_TESTS "run_${NATIVE_TEST_NAME}")
     list(APPEND ALL_TESTS_WITH_LCOV "run_${NATIVE_TEST_NAME}_with_lcov")
     list(APPEND ALL_TEST_COVERAGE "--add-tracefile")
     list(APPEND ALL_TEST_COVERAGE "${NUNAVUT_VERIFICATIONS_BINARY_DIR}/coverage.${NATIVE_TEST_NAME}.filtered.info")
-    set(ALL_TESTS ${ALL_TESTS} PARENT_SCOPE)
-    set(ALL_TESTS_WITH_LCOV ${ALL_TESTS_WITH_LCOV} PARENT_SCOPE)
-    set(ALL_TEST_COVERAGE ${ALL_TEST_COVERAGE} PARENT_SCOPE)
-endfunction()
-
-if (NUNAVUT_VERIFICATION_LANG STREQUAL "c")
-     runTestCpp(TEST_FILE test_canard.cpp                         LINK dsdl-regulated dsdl-test LANGUAGE_FLAVORS c11)
-     runTestCpp(TEST_FILE test_support_assert.cpp                 LINK dsdl-regulated dsdl-test LANGUAGE_FLAVORS c11)
-     runTestC(  TEST_FILE test_constant.c                         LINK dsdl-regulated dsdl-test LANGUAGE_FLAVORS c11 FRAMEWORK "unity")
-     runTestC(  TEST_FILE test_override_variable_array_capacity.c LINK dsdl-regulated dsdl-test LANGUAGE_FLAVORS c11 FRAMEWORK "unity")
-     runTestC(  TEST_FILE test_serialization.c                    LINK dsdl-regulated dsdl-test LANGUAGE_FLAVORS c11 FRAMEWORK "unity")
-     runTestC(  TEST_FILE test_support.c                          LINK dsdl-regulated dsdl-test LANGUAGE_FLAVORS c11 FRAMEWORK "unity")
-     runTestC(  TEST_FILE test_simple.c                           LINK dsdl-regulated dsdl-test LANGUAGE_FLAVORS c11 FRAMEWORK "none")
-endif()
+endforeach()
 
 # +---------------------------------------------------------------------------+
 #   Finally, we setup an overall report. the coverage.info should be uploaded

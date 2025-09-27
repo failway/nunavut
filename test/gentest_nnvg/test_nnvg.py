@@ -1,9 +1,8 @@
 #
-# Copyright (C) OpenCyphal Development Team  <opencyphal.org>
-# Copyright Amazon.com Inc. or its affiliates.
-# SPDX-License-Identifier: MIT
+# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
+# This software is distributed under the terms of the MIT License.
 #
-# cSpell:ignore scotec, herringtec
 import json
 import os
 import pathlib
@@ -12,15 +11,12 @@ import typing
 
 import pytest
 
-import nunavut._version
-from nunavut.lang import LanguageContextBuilder
-from nunavut.lang._language import LanguageClassLoader
+import nunavut.version
 
-
-@pytest.mark.parametrize("env_var_name", ["DSDL_INCLUDE_PATH"])
-def test_DSDL_INCLUDE_PATH(gen_paths: typing.Any, run_nnvg: typing.Callable, env_var_name: str) -> None:
+@pytest.mark.parametrize('env_var_name', ["UAVCAN_DSDL_INCLUDE_PATH", "DSDL_INCLUDE_PATH"])
+def test_UAVCAN_DSDL_INCLUDE_PATH(gen_paths: typing.Any, run_nnvg: typing.Callable, env_var_name: str) -> None:
     """
-    Verify that the DSDL_INCLUDE_PATH environment variable and any aliases are used by nnvg.
+    Verify that supported environment variables are used by nnvg.
     """
 
     nnvg_args0 = [
@@ -28,8 +24,8 @@ def test_DSDL_INCLUDE_PATH(gen_paths: typing.Any, run_nnvg: typing.Callable, env
         gen_paths.templates_dir.as_posix(),
         "-O",
         gen_paths.out_dir.as_posix(),
-        "-l",
-        "js",
+        "-e",
+        ".json",
         "-Xlang",
         (gen_paths.dsdl_dir / pathlib.Path("uavcan")).as_posix(),
     ]
@@ -39,7 +35,7 @@ def test_DSDL_INCLUDE_PATH(gen_paths: typing.Any, run_nnvg: typing.Callable, env
 
     scotec_path = (gen_paths.dsdl_dir / pathlib.Path("scotec")).as_posix()
     herringtec_path = (gen_paths.dsdl_dir / pathlib.Path("herringtec")).as_posix()
-    env = {env_var_name: f"{herringtec_path}{os.pathsep}{scotec_path}"}
+    env = {env_var_name: "{}{}{}".format(herringtec_path, os.pathsep, scotec_path)}
     run_nnvg(gen_paths, nnvg_args0, env=env)
 
 
@@ -53,8 +49,8 @@ def test_nnvg_heals_missing_dot_in_extension(gen_paths: typing.Any, run_nnvg: ty
         gen_paths.templates_dir.as_posix(),
         "-O",
         gen_paths.out_dir.as_posix(),
-        "-l",
-        "js",
+        "-e",
+        "json",
         "-Xlang",
         "-I",
         (gen_paths.dsdl_dir / pathlib.Path("scotec")).as_posix(),
@@ -65,47 +61,35 @@ def test_nnvg_heals_missing_dot_in_extension(gen_paths: typing.Any, run_nnvg: ty
     run_nnvg(gen_paths, nnvg_args)
 
 
-@pytest.mark.parametrize("generate_support", ["as-needed", "never", "always", "only"])
-def test_list_inputs(gen_paths: typing.Any, run_nnvg: typing.Callable, generate_support: str) -> None:
+def test_list_inputs(gen_paths: typing.Any, run_nnvg: typing.Callable) -> None:
     """
     Verifies nnvg's --list-input mode.
     """
-    expected_output = [
-        gen_paths.templates_dir / pathlib.Path("Any.j2"),
-        gen_paths.dsdl_dir / pathlib.Path("uavcan") / pathlib.Path("test") / pathlib.Path("TestType.0.8.dsdl"),
-    ]
+    expected_output = sorted(
+        [
+            gen_paths.templates_dir / pathlib.Path("Any.j2"),
+            gen_paths.dsdl_dir / pathlib.Path("uavcan") / pathlib.Path("test") / pathlib.Path("TestType.0.8.uavcan"),
+        ]
+    )
 
-    expected_serialization_support_outputs = [
-        gen_paths.lang_src_dir
-        / pathlib.Path("c")
-        / pathlib.Path("support")
-        / pathlib.Path("serialization").with_suffix(".j2")
-    ]
-
-    # when #58 is fixed `(gen_paths.dsdl_dir / pathlib.Path('scotec') / pathlib.Path('Timer.1.0.dsdl')).as_posix()`
+    # when #58 is fixed `(gen_paths.dsdl_dir / pathlib.Path('scotec') / pathlib.Path('Timer.1.0.uavcan')).as_posix()`
     # should be added to this list.
     nnvg_args = [
         "--templates",
         gen_paths.templates_dir.as_posix(),
         "-O",
         gen_paths.out_dir.as_posix(),
-        "--target-language",
-        "c",
+        "-e",
+        ".json",
         "-I",
         (gen_paths.dsdl_dir / pathlib.Path("scotec")).as_posix(),
         "--list-inputs",
         (gen_paths.dsdl_dir / pathlib.Path("uavcan")).as_posix(),
-        f"--generate-support={generate_support}",
     ]
-
-    if generate_support == "only":
-        expected_output = expected_serialization_support_outputs
-    elif generate_support != "never":
-        expected_output = expected_output + expected_serialization_support_outputs
 
     completed = run_nnvg(gen_paths, nnvg_args).stdout.decode("utf-8").split(";")
     completed_wo_empty = sorted([pathlib.Path(i) for i in completed if len(i) > 0])
-    assert sorted(expected_output) == sorted(completed_wo_empty)
+    assert expected_output == sorted(completed_wo_empty)
 
 
 def test_list_inputs_w_namespaces(gen_paths: typing.Any, run_nnvg: typing.Callable) -> None:
@@ -115,23 +99,21 @@ def test_list_inputs_w_namespaces(gen_paths: typing.Any, run_nnvg: typing.Callab
     expected_output = sorted(
         [
             gen_paths.templates_dir / pathlib.Path("Any.j2"),
-            gen_paths.dsdl_dir / pathlib.Path("uavcan") / pathlib.Path("test") / pathlib.Path("TestType.0.8.dsdl"),
+            gen_paths.dsdl_dir / pathlib.Path("uavcan") / pathlib.Path("test") / pathlib.Path("TestType.0.8.uavcan"),
             gen_paths.dsdl_dir / pathlib.Path("uavcan"),
             gen_paths.dsdl_dir / pathlib.Path("uavcan") / pathlib.Path("test"),
         ]
     )
 
-    # when #58 is fixed `(gen_paths.dsdl_dir / pathlib.Path('scotec') / pathlib.Path('Timer.1.0.dsdl')).as_posix()`
+    # when #58 is fixed `(gen_paths.dsdl_dir / pathlib.Path('scotec') / pathlib.Path('Timer.1.0.uavcan')).as_posix()`
     # and `(gen_paths.dsdl_dir / pathlib.Path('scotec').as_posix()` should be added to this list.
     nnvg_args = [
         "--templates",
         gen_paths.templates_dir.as_posix(),
         "-O",
         gen_paths.out_dir.as_posix(),
-        "-l",
-        "js",
-        "-Xlang",
-        "--omit-serialization-support",
+        "-e",
+        ".json",
         "-I",
         (gen_paths.dsdl_dir / pathlib.Path("scotec")).as_posix(),
         "--list-inputs",
@@ -159,10 +141,7 @@ def test_list_outputs(gen_paths: typing.Any, run_nnvg: typing.Callable) -> None:
         gen_paths.out_dir.as_posix(),
         "-e",
         ".json",
-        "-l",
-        "js",
         "-Xlang",
-        "--omit-serialization-support",
         "-I",
         (gen_paths.dsdl_dir / pathlib.Path("scotec")).as_posix(),
         "--list-outputs",
@@ -260,7 +239,7 @@ def test_version(gen_paths: typing.Any, run_nnvg: typing.Callable) -> None:
     nnvg_args = ["--version"]
 
     completed = run_nnvg(gen_paths, nnvg_args).stdout.decode("utf-8")
-    assert nunavut._version.__version__ == completed
+    assert nunavut.version.__version__ == completed
 
 
 def test_target_language(gen_paths: typing.Any, run_nnvg: typing.Callable) -> None:
@@ -550,8 +529,8 @@ def test_issue_116(gen_paths: typing.Any, run_nnvg: typing.Callable) -> None:
     nnvg_args = [
         "-O",
         gen_paths.out_dir.as_posix(),
-        "-l",
-        "blarg",
+        "-e",
+        ".blarg",
         "-I",
         (gen_paths.dsdl_dir / pathlib.Path("scotec")).as_posix(),
         "--list-outputs",
@@ -564,7 +543,7 @@ def test_issue_116(gen_paths: typing.Any, run_nnvg: typing.Callable) -> None:
         pytest.fail("nnvg completed normally when it should have failed to find a template.")
     except subprocess.CalledProcessError as e:
         error_output = e.stderr.decode("UTF-8")
-        assert "language blarg is not a supported language" in error_output
+        assert "No target language was given" in error_output
 
 
 def test_language_allow_unregulated_fixed_portid(gen_paths: typing.Any, run_nnvg: typing.Callable) -> None:
@@ -594,39 +573,3 @@ def test_language_allow_unregulated_fixed_portid(gen_paths: typing.Any, run_nnvg
     completed = run_nnvg(gen_paths, nnvg_args).stdout.decode("utf-8").split(";")
     completed_wo_empty = sorted([pathlib.Path(i) for i in completed if len(i) > 0])
     assert expected_output == sorted(completed_wo_empty)
-
-
-def test_list_configuration(gen_paths: typing.Any, run_nnvg: typing.Callable) -> None:
-    """
-    Verifies nnvg's --list-configuration option
-    """
-    import yaml
-
-    nnvg_args = ["--list-configuration"]
-
-    completed = run_nnvg(gen_paths, nnvg_args).stdout.decode("utf-8").split(";")
-    parsed_config = yaml.load("\n".join(completed), yaml.Loader)
-    default_target_section_name = LanguageClassLoader.to_language_module_name(
-        LanguageContextBuilder.DEFAULT_TARGET_LANGUAGE
-    )
-    assert len(parsed_config[default_target_section_name]) > 0
-    print(yaml.dump(parsed_config))
-
-def test_support_templates_dir(gen_paths: typing.Any, run_nnvg: typing.Callable) -> None:
-    """
-    Use the --support-templates option to find templates for support generation
-    """
-    nnvg_args = [
-        "--templates",
-        gen_paths.templates_dir.as_posix(),
-        "--support-templates",
-        gen_paths.support_templates_dir.as_posix(),
-        "-O",
-        gen_paths.out_dir.as_posix(),
-        "-I",
-        (gen_paths.dsdl_dir / pathlib.Path("scotec")).as_posix(),
-        "--list-inputs",
-        (gen_paths.dsdl_dir / pathlib.Path("uavcan")).as_posix(),
-    ]
-
-    run_nnvg(gen_paths, nnvg_args).stdout.decode("utf-8").split(";")

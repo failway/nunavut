@@ -1,14 +1,12 @@
 #
-# Copyright (C) OpenCyphal Development Team  <opencyphal.org>
-# Copyright Amazon.com Inc. or its affiliates.
-# SPDX-License-Identifier: MIT
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright (C) 2018-2021  UAVCAN Development Team  <uavcan.org>
+# This software is distributed under the terms of the MIT License.
 #
-"""
-Jinja2 extensions for use with the Nunavut code generator.
-"""
+
 import typing
 
-from nunavut.jinja.jinja2 import TemplateAssertionError, UndefinedError, nodes
+from nunavut.jinja.jinja2 import Environment, TemplateAssertionError, UndefinedError, nodes
 from nunavut.jinja.jinja2.ext import Extension
 from nunavut.jinja.jinja2.parser import Parser
 
@@ -25,14 +23,12 @@ class JinjaAssert(Extension):
         .. invisible-code-block: python
 
             from nunavut.jinja.jinja2.exceptions import TemplateAssertionError
-            from nunavut.jinja import CodeGenEnvironmentBuilder
+            from nunavut.jinja import CodeGenEnvironment
             from nunavut.jinja.jinja2 import DictLoader
             from nunavut.jinja.extensions import JinjaAssert
-            from nunavut.lang import LanguageContextBuilder
 
-            e = CodeGenEnvironmentBuilder(DictLoader({'test': template}), LanguageContextBuilder().create()) \
-                .set_extensions(JinjaAssert) \
-                .create()
+            e = CodeGenEnvironment(loader=DictLoader({'test': template}),
+                                   extensions=[JinjaAssert])
             try:
                 e.get_template('test').render()
                 # huh. This should have raised a TemplateAssertionError
@@ -40,7 +36,7 @@ class JinjaAssert(Extension):
             except TemplateAssertionError:
                 pass
 
-        This extension also support providing an assertion message:
+        This extension also support provding an assertion message:
 
         .. code-block:: python
 
@@ -48,9 +44,8 @@ class JinjaAssert(Extension):
 
         .. invisible-code-block: python
 
-            e = CodeGenEnvironmentBuilder(DictLoader({'test': template}), LanguageContextBuilder().create())\
-                .set_extensions(JinjaAssert)\
-                .create()
+            e = CodeGenEnvironment(loader=DictLoader({'test': template}),
+                                   extensions=[JinjaAssert])
             try:
                 e.get_template('test').render()
                 # huh. This should have raised a TemplateAssertionError
@@ -61,6 +56,9 @@ class JinjaAssert(Extension):
     """
 
     tags = set(["assert"])
+
+    def __init__(self, environment: Environment):
+        super().__init__(environment)
 
     def parse(self, parser: Parser) -> nodes.Node:
         """
@@ -114,23 +112,23 @@ class UseQuery(Extension):
         .. invisible-code-block: python
 
             from nunavut.jinja.jinja2.exceptions import TemplateAssertionError
-            from nunavut.jinja import CodeGenEnvironmentBuilder
+            from nunavut.jinja import CodeGenEnvironment
             from nunavut.jinja.jinja2 import DictLoader
             from nunavut.jinja.extensions import UseQuery
-            from nunavut.lang import LanguageClassLoader
+            from nunavut.lang import LanguageLoader
             from nunavut.jinja.jinja2 import UndefinedError
             from unittest.mock import MagicMock
 
-            ln_c = LanguageClassLoader().new_language('c')
+            ln_c = LanguageLoader().load_language('c', True)
 
             lctx = MagicMock()
             lctx.get_supported_languages = MagicMock(return_value = {'c': ln_c})
             lctx.get_target_language = MagicMock(return_value = ln_c)
 
 
-            e = CodeGenEnvironmentBuilder(DictLoader({'test': template}), lctx) \
-                .set_extensions(UseQuery)\
-                .create()
+            e = CodeGenEnvironment(lctx=lctx,
+                                   loader=DictLoader({'test': template}),
+                                   extensions=[UseQuery])
 
             try:
                 result = e.get_template('test').render()
@@ -156,6 +154,9 @@ class UseQuery(Extension):
     """
 
     tags = set(["ifuses", "ifnuses"])
+
+    def __init__(self, environment: Environment):
+        super().__init__(environment)
 
     def parse(self, parser: Parser) -> nodes.Node:
         """
@@ -191,12 +192,12 @@ class UseQuery(Extension):
                 node = nodes.If(lineno=parser.stream.current.lineno)
                 result.elif_.append(node)
                 continue
-            if token.test("name:elifnuses"):
+            elif token.test("name:elifnuses"):
                 negate = True
                 node = nodes.If(lineno=parser.stream.current.lineno)
                 result.elif_.append(node)
                 continue
-            if token.test("name:else"):
+            elif token.test("name:else"):
                 result.else_ = parser.parse_statements(
                     (
                         "name:endifuses",
@@ -208,8 +209,13 @@ class UseQuery(Extension):
         return result
 
     def _use_query_common(self, uses_query_name: str, lineno: int, name: str, filename: str) -> bool:
+
         target_language = self.environment.target_language
 
+        if target_language is None:
+            raise TemplateAssertionError(
+                "ifuses directive cannot be used in a language without a target language.", lineno, name, filename
+            )
         if uses_query_name is None:
             raise TemplateAssertionError("Unknown uses_query_name found.", lineno, name, filename)
 
@@ -217,11 +223,11 @@ class UseQuery(Extension):
             uses_query = typing.cast(
                 typing.Callable[..., bool], getattr(self.environment.target_language_uses_queries, uses_query_name)
             )
-        except AttributeError as e:
+        except AttributeError:
             raise UndefinedError(
-                f'use query "{uses_query_name}" for language "{target_language.name}" is not defined '
-                "(line={lineno}, name={name}, filename={filename})"
-            ) from e
+                'use query "{}" for language "{}" is not defined '
+                "(line={}, name={}, filename={})".format(uses_query_name, target_language.name, lineno, name, filename)
+            )
 
         return uses_query()
 

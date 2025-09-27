@@ -1,7 +1,7 @@
 #
-# Copyright (C) OpenCyphal Development Team  <opencyphal.org>
-# Copyright Amazon.com Inc. or its affiliates.
-# SPDX-License-Identifier: MIT
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright (C) 2018-2021  UAVCAN Development Team  <uavcan.org>
+# This software is distributed under the terms of the MIT License.
 #
 """
     Command-line for using nunavut and jinja to generate code
@@ -23,8 +23,6 @@ class _LazyVersionAction(argparse._VersionAction):
     if the --version action is requested.
     """
 
-    # pylint: disable=protected-access
-
     def __call__(
         self,
         parser: argparse.ArgumentParser,
@@ -32,8 +30,7 @@ class _LazyVersionAction(argparse._VersionAction):
         values: typing.Any,
         option_string: typing.Optional[str] = None,
     ) -> None:
-        # pylint: disable=import-outside-toplevel
-        from nunavut._version import __version__
+        from nunavut.version import __version__
 
         parser._print_message(__version__, sys.stdout)
         parser.exit()
@@ -44,7 +41,9 @@ class _NunavutArgumentParser(argparse.ArgumentParser):
     Specialization of argparse.ArgumentParser to encapsulate inter-argument rules.
     """
 
-    def parse_known_args(self, args=None, namespace=None):  # type: ignore
+    def parse_known_args(
+        self, args: typing.Optional[typing.Sequence[str]] = None, namespace: typing.Optional[argparse.Namespace] = None
+    ) -> typing.Tuple[argparse.Namespace, typing.List[str]]:
         parsed_args, argv = super().parse_known_args(args, namespace)
         self._post_process_args(parsed_args)
         return (parsed_args, argv)
@@ -53,6 +52,11 @@ class _NunavutArgumentParser(argparse.ArgumentParser):
         """
         Applies rules between different arguments and handles other special cases.
         """
+        if args.list_inputs is not None and args.target_language is None and args.output_extension is None:
+            # This is a special case where we know we'll never actually use the output extension since
+            # we are only listing the input files. All other cases require either an output extension or
+            # a valid target language.
+            setattr(args, "output_extension", ".tmp")
 
         if args.omit_serialization_support and args.generate_support == "always":
             self.error(
@@ -87,7 +91,7 @@ def _make_parser() -> argparse.ArgumentParser:
     )
 
     parser = _NunavutArgumentParser(
-        description="Generate code from Cyphal DSDL using pydsdl and jinja2",
+        description="Generate code from UAVCAN DSDL using pydsdl and jinja2",
         epilog=epilog,
         formatter_class=argparse.RawTextHelpFormatter,
     )
@@ -97,6 +101,7 @@ def _make_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--lookup-dir",
         "-I",
+        default=[],
         action="append",
         help=textwrap.dedent(
             """
@@ -108,9 +113,9 @@ def _make_parser() -> argparse.ArgumentParser:
         the vendor-specific namespace won't be able to use data types from the standard
         namespace.
 
-        Additional directories can also be specified through an environment variable
-        DSDL_INCLUDE_PATH where the path entries are separated by colons ":" on
-        posix systems and ";" on Windows.
+        Additional directories can also be specified through the environment variable
+        DSDL_INCLUDE_PATH, where the path entries are separated by colons ":" on posix
+        systems and ";" on Windows.
 
     """
         ).lstrip(),
@@ -130,21 +135,8 @@ def _make_parser() -> argparse.ArgumentParser:
         Paths to a directory containing templates to use when generating code.
 
         Templates found under these paths will override the built-in templates for a
-        given language.
-
-    """
-        ).lstrip(),
-    )
-
-    parser.add_argument(
-        "--support-templates",
-        help=textwrap.dedent(
-            """
-
-        Paths to a directory containing templates to use when generating support code.
-
-        Templates found under these paths will override the built-in support templates for a
-        given language.
+        given language. If no target language was provided and no template paths were
+        provided then no source will be generated.
 
     """
         ).lstrip(),
@@ -189,10 +181,12 @@ def _make_parser() -> argparse.ArgumentParser:
         ).lstrip(),
     )
 
+    ext_required = "--list-inputs" not in sys.argv and "--target-language" not in sys.argv and "-l" not in sys.argv
     parser.add_argument(
         "--output-extension",
         "-e",
         type=extension_type,
+        required=ext_required,
         help="The extension to use for generated files.",
     )
 
@@ -280,6 +274,7 @@ def _make_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--namespace-output-stem",
+        default=None,
         help="The name of the file generated when --generate-namespace-types is provided.",
     )
 
@@ -347,46 +342,13 @@ def _make_parser() -> argparse.ArgumentParser:
 
         Do not reject unregulated fixed port identifiers.
         This is a dangerous feature that must not be used unless you understand the
-        risks. The background information is provided in the Cyphal specification.
+        risks. The background information is provided in the UAVCAN specification.
 
     """
         ).lstrip(),
     )
 
     parser.add_argument(
-        "--embed-auditing-info",
-        action="store_true",
-        help=textwrap.dedent(
-            """
-
-        If set, generators are instructed to add additional information in the form of
-        language-specific comments or meta-data to use when auditing source code generated by
-        Nunavut. This data may change based on the environment in use which may interfere with
-        the reproducibility of your builds. For example, paths to input files used to generate
-        a type may be included with this option where these paths will be different depending
-        on the server used to run nnvg.
-
-    """
-        ).lstrip(),
-    )
-
-    # +-----------------------------------------------------------------------+
-    # | Post-Processing Options
-    # +-----------------------------------------------------------------------+
-
-    ln_pp_group = parser.add_argument_group(
-        "post-processing options",
-        description=textwrap.dedent(
-            """
-
-        Options that enable various post-generation steps because Pavel Kirienko doesn't
-        like writing jinja templates.
-
-    """
-        ).lstrip(),
-    )
-
-    ln_pp_group.add_argument(
         "--pp-max-emptylines",
         type=int,
         help=textwrap.dedent(
@@ -403,7 +365,7 @@ def _make_parser() -> argparse.ArgumentParser:
         ).lstrip(),
     )
 
-    ln_pp_group.add_argument(
+    parser.add_argument(
         "--pp-trim-trailing-whitespace",
         action="store_true",
         help=textwrap.dedent(
@@ -420,7 +382,7 @@ def _make_parser() -> argparse.ArgumentParser:
         ).lstrip(),
     )
 
-    ln_pp_group.add_argument(
+    parser.add_argument(
         "-pp-rp",
         "--pp-run-program",
         help=textwrap.dedent(
@@ -440,7 +402,7 @@ def _make_parser() -> argparse.ArgumentParser:
         ).lstrip(),
     )
 
-    ln_pp_group.add_argument(
+    parser.add_argument(
         "-pp-rpa",
         "--pp-run-program-arg",
         action="append",
@@ -454,15 +416,12 @@ def _make_parser() -> argparse.ArgumentParser:
         ).lstrip(),
     )
 
-    # +-----------------------------------------------------------------------+
-    # | Language Options
-    # +-----------------------------------------------------------------------+
     ln_opt_group = parser.add_argument_group(
         "language options",
         description=textwrap.dedent(
             """
 
-        Options passed through to templates as `options` on the target language.
+        Options passed through to templates as `language_options` on the target language.
 
         Note that these arguments are passed though without validation, have no effect on the Nunavut
         library, and may or may not be appropriate based on the target language and generator templates
@@ -533,7 +492,6 @@ def _make_parser() -> argparse.ArgumentParser:
     ln_opt_group.add_argument(
         "--language-standard",
         "-std",
-        choices=["c11", "c++14", "cetl++14-17", "c++17", "c++17-pmr", "c++20"],
         help=textwrap.dedent(
             """
 
@@ -547,42 +505,13 @@ def _make_parser() -> argparse.ArgumentParser:
         ).lstrip(),
     )
 
-    ln_opt_group.add_argument(
-        "--configuration",
-        "-c",
-        nargs="*",
-        type=pathlib.Path,
-        help=textwrap.dedent(
-            """
-
-        There is a set of built-in configuration for Nunavut that provides default values for known
-        languages as documented `in the template guide
-        <https://nunavut.readthedocs.io/en/latest/docs/templates.html#language-options>`_. This argument lets you
-        specify override configuration yamls.
-    """
-        ).lstrip(),
-    )
-
-    ln_opt_group.add_argument(
-        "--list-configuration",
-        "-lc",
-        action="store_true",
-        help=textwrap.dedent(
-            """
-
-        Lists all configuration values resolved for the given arguments.
-
-    """
-        ).lstrip(),
-    )
-
     return parser
 
 
 def _extra_includes_from_env(env_var_name: str) -> typing.List[str]:
     try:
         extra_includes_from_env = os.environ[env_var_name].split(os.pathsep)
-        logging.info("Additional include directories from %s: %s", env_var_name, str(extra_includes_from_env))
+        logging.info("Additional include directories from {}: %s", env_var_name, str(extra_includes_from_env))
         return extra_includes_from_env
     except KeyError:
         return []
@@ -610,14 +539,16 @@ def main() -> int:
     #
     # Parse DSDL_INCLUDE_PATH
     #
-    extra_includes: typing.List[str] = args.lookup_dir if args.lookup_dir is not None else []
+    extra_includes = args.lookup_dir
 
-    extra_includes_from_env = _extra_includes_from_env("DSDL_INCLUDE_PATH")
+    # legacy variable. We'll support this for a time.
+    extra_includes_from_env = _extra_includes_from_env("UAVCAN_DSDL_INCLUDE_PATH")
+    extra_includes_from_env += _extra_includes_from_env("DSDL_INCLUDE_PATH")
     extra_includes += sorted(extra_includes_from_env)
 
-    # pylint: disable=import-outside-toplevel
     from nunavut.cli.runners import ArgparseRunner
 
-    runner = ArgparseRunner(args.root_namespace, args, extra_includes)
+    runner = ArgparseRunner(args, extra_includes)
+    runner.setup()
     runner.run()
     return 0

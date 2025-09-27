@@ -1,5 +1,3 @@
-.. _template-language-guide:
-
 ################################################
 Template Language Guide
 ################################################
@@ -237,8 +235,6 @@ Common Filters
    :noindex:
 .. autofunction:: nunavut.jinja.DSDLCodeGenerator.filter_bits2bytes_ceil
    :noindex:
-.. autofunction:: nunavut.jinja.DSDLCodeGenerator.filter_text_table
-   :noindex:
 
 Common Tests
 -------------------------------------------------
@@ -308,6 +304,10 @@ C++ Filters
    :noindex:
 .. autofunction:: nunavut.lang.cpp.filter_declaration
    :noindex:
+.. autofunction:: nunavut.lang.cpp.filter_definition_begin
+   :noindex:
+.. autofunction:: nunavut.lang.cpp.filter_definition_end
+   :noindex:
 .. autofunction:: nunavut.lang.cpp.filter_to_namespace_qualifier
    :noindex:
 .. autofunction:: nunavut.lang.cpp.filter_type_from_primitive
@@ -327,10 +327,6 @@ C++ Use Queries
 -------------------------------------------------
 .. autofunction:: nunavut.lang.cpp.uses_std_variant
    :noindex:
-.. autofunction:: nunavut.lang.cpp.uses_cetl
-   :noindex:
-.. autofunction:: nunavut.lang.cpp.uses_pmr
-   :noindex:
 
 
 Python Filters
@@ -347,12 +343,6 @@ Python Filters
 .. autofunction:: nunavut.lang.py.filter_imports
    :noindex:
 .. autofunction:: nunavut.lang.py.filter_longest_id_length
-   :noindex:
-.. autofunction:: nunavut.lang.py.filter_pickle
-   :noindex:
-.. autofunction:: nunavut.lang.py.filter_numpy_scalar_type
-   :noindex:
-.. autofunction:: nunavut.lang.py.filter_newest_minor_version_aliases
    :noindex:
 
 
@@ -403,7 +393,7 @@ To share common formatting for these templates use `Jinja template inheritance`_
 given a template ``common_header.j2``::
 
    /*
-    * Cyphal data structure definition for nunavut.
+    * UAVCAN data structure definition for nunavut.
     *
     * Auto-generated, do not edit.
     *

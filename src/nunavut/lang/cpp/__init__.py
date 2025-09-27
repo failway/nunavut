@@ -1,117 +1,30 @@
 #
-# Copyright (C) OpenCyphal Development Team  <opencyphal.org>
-# Copyright Amazon.com Inc. or its affiliates.
-# SPDX-License-Identifier: MIT
+# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
+# This software is distributed under the terms of the MIT License.
 #
 """
     Filters for generating C++. All filters in this
     module will be available in the template's global namespace as ``cpp``.
 """
 
-
-import fractions
 import functools
+import fractions
 import io
 import re
 import textwrap
 import typing
-from enum import Enum, auto
 
 import pydsdl
 
-from nunavut._dependencies import Dependencies
-from nunavut._templates import (
-    template_environment_list_filter,
-    template_language_filter,
-    template_language_list_filter,
-    template_language_test,
-)
-from nunavut._utilities import YesNoDefault, cached_property
-from nunavut.jinja.environment import Environment
-from nunavut.lang._common import IncludeGenerator, TokenEncoder, UniqueNameGenerator
-from nunavut.lang._language import Language as BaseLanguage
-from nunavut.lang.c import _CFit
-from nunavut.lang.c import filter_literal as c_filter_literal
+from ...templates import template_language_filter, template_language_list_filter, template_language_test
+from .. import Dependencies
+from .. import Language as BaseLanguage
+from .._common import IncludeGenerator, TokenEncoder, UniqueNameGenerator
+from ..c import _CFit
+from ..c import filter_literal as c_filter_literal
 
-# +-------------------------------------------------------------------------------------------------------------------+
-# | ENUMERATIONS
-# +-------------------------------------------------------------------------------------------------------------------+
-
-
-class ConstructorConvention(Enum):
-    """
-    Indicates the convention used for constructors in the target language.
-
-    .. invisible-code-block: python
-
-        from nunavut.lang.cpp import ConstructorConvention
-
-        assert "default" == ConstructorConvention.DEFAULT
-        assert ConstructorConvention.DEFAULT == ConstructorConvention.from_string("default")
-        assert ConstructorConvention.USES_LEADING_ALLOCATOR == \
-            ConstructorConvention.from_string("uses-leading-allocator")
-        assert "uses-trailing-allocator" == str(ConstructorConvention.USES_TRAILING_ALLOCATOR)
-
-        from pytest import raises as assert_raises
-        assert_raises(ValueError, ConstructorConvention.from_string, "not-a-convention")
-
-    """
-
-    DEFAULT = "default"
-    USES_LEADING_ALLOCATOR = "uses-leading-allocator"
-    USES_TRAILING_ALLOCATOR = "uses-trailing-allocator"
-
-    def __str__(self) -> str:
-        """
-        Return a string representation of the ConstructorConvention enum value.
-
-        :return: The string representation of the enum value.
-        :rtype: str
-        """
-        return self.value
-
-    def __eq__(self, value: object) -> bool:
-        if isinstance(value, str):
-            return super().__eq__(ConstructorConvention.from_string(value))
-        return super().__eq__(value)
-
-    @staticmethod
-    def from_string(s: str) -> "ConstructorConvention":
-        """
-        Parse a string into a ConstructorConvention enum value.
-
-        :param s: The string to parse.
-        :return: The enum value corresponding to the string.
-        :rtype: ConstructorConvention
-        :raises: ValueError if the string does not correspond to a valid enum value.
-        """
-        for e in ConstructorConvention:
-            if s.lower().replace("_", "-") == e.value:
-                return e
-        raise ValueError(f"Invalid ConstructorConvention string '{s}'")
-
-
-class SpecialMethod(Enum):
-    """
-    Enum used in the Jinja templates to differentiate different kinds of constructors
-    """
-
-    ALLOCATOR_CONSTRUCTOR = auto()
-    """ Constructor that takes an allocator as its single, required argument """
-
-    INITIALIZING_CONSTRUCTOR_WITH_ALLOCATOR = auto()
-    """ Constructor that takes an initializing value for each field followed by the allocator argument """
-
-    COPY_CONSTRUCTOR_WITH_ALLOCATOR = auto()
-    """ Copy constructor that also takes an allocator argument """
-
-    MOVE_CONSTRUCTOR_WITH_ALLOCATOR = auto()
-    """ Move constructor that also takes an allocator argument """
-
-
-# +-------------------------------------------------------------------------------------------------------------------+
-# | LANGUAGE SUPPORT
-# +-------------------------------------------------------------------------------------------------------------------+
+DEFAULT_ARRAY_TYPE = "std::array<{TYPE},{MAX_SIZE}>"
 
 
 class Language(BaseLanguage):
@@ -121,77 +34,10 @@ class Language(BaseLanguage):
 
     CPP_STD_EXTRACT_NUMBER_PATTERN = re.compile(r"(?:gnu|c)\+\+(\d(?:\w))")
 
-    def _validate_language_options(
-        self, defaults: typing.Dict[str, typing.Any], options: typing.Dict[str, typing.Any]
-    ) -> typing.Dict[str, typing.Any]:
-        """
-        apply defaults based on language standard
-
-        .. invisible-code-block: python
-
-            from nunavut.lang import LanguageContextBuilder
-            from pytest import raises as assert_raises
-
-            # test std
-            language = LanguageContextBuilder(include_experimental_languages=True)\
-               .set_target_language("cpp")\
-               .set_target_language_configuration_override("options", { "std_flavor":"std"})\
-               .create()\
-               .get_target_language()
-
-            assert language._validate_language_options(
-                {},
-                {
-                    "std":"c++17",
-                    "ctor_convention": "default"
-                }
-            ) == {
-                    "std":"c++17",
-                    "ctor_convention": "default"
-                 }
-
-            assert_raises(ValueError, \
-                language._validate_language_options, {}, {"ctor_convention": "default"})
-
-            assert_raises(ValueError, \
-                language._validate_language_options, {}, {"std":"c++17", "ctor_convention": "uses-leading-allocator"})
-
-            assert_raises(ValueError, \
-                language._validate_language_options, {}, \
-                    {"std":"c++17", "ctor_convention": "uses-leading-allocator", "allocator_type": ""})
-
-        """
-        try:
-            language_standard = options["std"]
-        except KeyError as e:
-            raise ValueError("The 'std' option must be in the language options for the C++ language.") from e
-
-        if language_standard in defaults:
-            options.update(defaults[language_standard])
-
-        try:
-            ctor_convention = ConstructorConvention.from_string(options["ctor_convention"])
-        except KeyError as e:
-            raise ValueError("No constructor convention option in C++ language options. This is required.") from e
-
-        if ctor_convention != ConstructorConvention.DEFAULT and (
-            "allocator_type" not in options or not options["allocator_type"]
-        ):
-            raise ValueError(
-                f"allocator_type property must be specified when ctor_convention is '{str(ctor_convention)}'"
-            )
-        return options
-
-    def _validate_globals(self, globals_map: typing.Dict[str, typing.Any]) -> typing.Dict[str, typing.Any]:
-        globals_map["ConstructorConvention"] = ConstructorConvention
-        globals_map["SpecialMethod"] = SpecialMethod
-        return globals_map
-
     @staticmethod
     def _handle_stropping_or_encoding_failure(
         encoder: TokenEncoder, stropped: str, token_type: str, pending_error: RuntimeError
     ) -> str:
-        # pylint: disable=unused-argument
         """
         If the generic stropping fails we take one last look to see if there is something c++-specific we can do.
         """
@@ -204,15 +50,15 @@ class Language(BaseLanguage):
         if m:
             # Resolve the conflict between C's global identifier rules and our desire to use
             # '_' as a stropping prefix:
-            return f"_{m.group(1).lower()}{stropped[m.end() :]}"
+            return "_{}{}".format(m.group(1).lower(), stropped[m.end() :])
 
         # we couldn't help after all. raise the pending error.
         raise pending_error
 
-    @cached_property
-    def _token_encoder(self) -> TokenEncoder:
+    @functools.lru_cache(maxsize=None)
+    def _get_token_encoder(self) -> TokenEncoder:
         """
-        Cached property to ensure we don't have to recompile TokenEncoders for each filter invocation.
+        Caching getter to ensure we don't have to recompile TokenEncoders for each filter invocation.
         """
         return TokenEncoder(
             self,
@@ -220,68 +66,23 @@ class Language(BaseLanguage):
             encoding_failure_handler=self._handle_stropping_or_encoding_failure,
         )
 
-    @property
-    def standard_flavor(self) -> str:
+    def _standard_version(self) -> int:
         """
-        A flavor of the C++ language standard being targeted.
-
         .. invisible-code-block: python
 
-           from nunavut.lang import LanguageContextBuilder
-
-           # test std
-           language = LanguageContextBuilder(include_experimental_languages=True)\
-               .set_target_language("cpp")\
-               .set_target_language_configuration_override("options", { "std_flavor":"std"})\
-               .create()\
-               .get_target_language()
-
-           assert language.standard_flavor == 'std'
-
-           # test cetl
-           language = LanguageContextBuilder(include_experimental_languages=True)\
-               .set_target_language("cpp")\
-               .set_target_language_configuration_override("options", { "std_flavor":"cetl"})\
-               .create()\
-               .get_target_language()
-           assert language.standard_flavor == 'cetl'
-        """
-        return str(self.get_option("std_flavor"))
-
-    @property
-    def standard_version(self) -> int:
-        """
-        The numeric version of the C++ language standard being targeted.
-
-        .. invisible-code-block: python
-
-           from nunavut.lang import LanguageContextBuilder
+           from nunavut.lang import LanguageLoader
 
            # test c++17
-           language = LanguageContextBuilder(include_experimental_languages=True)\
-               .set_target_language("cpp")\
-               .set_target_language_configuration_override("options", { "std":"c++17"})\
-               .create()\
-               .get_target_language()
-
-           assert language.standard_version == 17
+           language = LanguageLoader().load_language('cpp', True, {'std': 'c++17'})
+           assert language._standard_version() == 17
 
            # test c++14
-           language = LanguageContextBuilder(include_experimental_languages=True)\
-               .set_target_language("cpp")\
-               .set_target_language_configuration_override("options", { "std":"c++14"})\
-               .create()\
-               .get_target_language()
-           assert language.standard_version == 14
+           language = LanguageLoader().load_language('cpp', True, {'std': 'c++14'})
+           assert language._standard_version() == 14
 
            # test gnu++20
-           language = LanguageContextBuilder(include_experimental_languages=True)\
-               .set_target_language("cpp")\
-               .set_target_language_configuration_override("options", { "std":"gnu++20"})\
-               .create()\
-               .get_target_language()
-
-           assert language.standard_version == 20
+           language = LanguageLoader().load_language('cpp', True, {'std': 'gnu++20'})
+           assert language._standard_version() == 20
         """
         std = str(self.get_option("std", ""))
 
@@ -289,145 +90,46 @@ class Language(BaseLanguage):
 
         if match is not None and len(match.groups()) >= 1:
             return int(match.group(1))
-        return 0
+        else:
+            return 0
 
-    @property
-    def has_variant(self) -> bool:
+    def _has_variant(self) -> bool:
         """
         .. invisible-code-block: python
 
-           from nunavut.lang import LanguageClassLoader
+           from nunavut.lang import LanguageLoader
 
            # test c++17
-           language = (
-                LanguageContextBuilder(include_experimental_languages=True)
-                .set_target_language("cpp")
-                .set_target_language_configuration_override("options", { "std":"c++17"})
-                .create()
-                .get_target_language()
-           )
-
-           assert language.has_variant
+           language = LanguageLoader().load_language('cpp', True, {'std': 'c++17'})
+           assert language._has_variant()
 
            # test c++14
-           language = (
-               LanguageContextBuilder(include_experimental_languages=True)
-               .set_target_language("cpp")
-               .set_target_language_configuration_override("options", { "std":"c++14"})
-               .create()
-               .get_target_language()
-           )
-           assert not language.has_variant
+           language = LanguageLoader().load_language('cpp', True, {'std': 'c++14'})
+           assert not language._has_variant()
 
            # test gnu++20
-           language = (
-               LanguageContextBuilder(include_experimental_languages=True)
-               .set_target_language("cpp")
-               .set_target_language_configuration_override("options", { "std":"gnu++20"})
-               .create()
-               .get_target_language()
-           )
-
-           assert language.has_variant
+           language = LanguageLoader().load_language('cpp', True, {'std': 'gnu++20'})
+           assert language._has_variant()
         """
-        return self.standard_version >= 17
+        return self._standard_version() >= 17
 
     def get_includes(self, dep_types: Dependencies) -> typing.List[str]:
-        """
-        Get includes for c++ source.
-
-        .. invisible-code-block: python
-
-            from nunavut.lang import Language, LanguageContextBuilder
-            from nunavut._dependencies import Dependencies
-
-            def do_includes_test(override_vla_include, override_allocator_include):
-
-                foobar_vla_header_name = "foobar_vla.hpp"
-                foobar_allocator_header_name = "foobar_allocator.hpp"
-                language_options = {
-                    "variable_array_type_include": '' if not override_vla_include else foobar_vla_header_name,
-                    "allocator_include": '' if not override_allocator_include else foobar_allocator_header_name
-                }
-
-                lang_cpp = (
-                    LanguageContextBuilder(include_experimental_languages=True)
-                        .set_target_language("cpp")
-                        .set_target_language_configuration_override("options", language_options)
-                        .create()
-                        .get_target_language()
-                )
-
-                test_dependencies = Dependencies()
-                test_dependencies.uses_variable_length_array = True
-
-                # If we override the include we should not provide the default
-                # variable array include.
-
-                found_foobar_vla_header_name = False
-                found_foobar_allocator_header_name = False
-                for include in lang_cpp.get_includes(test_dependencies):
-                    if foobar_vla_header_name in include:
-                        found_foobar_vla_header_name = True
-                    if foobar_allocator_header_name in include:
-                        found_foobar_allocator_header_name = True
-
-                if override_vla_include:
-                    assert found_foobar_vla_header_name
-                else:
-                    assert not found_foobar_vla_header_name
-
-                if override_allocator_include:
-                    assert found_foobar_allocator_header_name
-                else:
-                    assert not found_foobar_allocator_header_name
-
-            do_includes_test(True, True)
-            do_includes_test(True, False)
-            do_includes_test(False, False)
-            do_includes_test(False, True)
-        """
-        std_includes: typing.List[str] = []
-        std_includes.append("limits")  # we always include limits to support static assertions
+        std_includes = []  # type: typing.List[str]
         if self.get_config_value_as_bool("use_standard_types"):
             if dep_types.uses_integer:
                 std_includes.append("cstdint")
-            if dep_types.uses_array or dep_types.uses_primitive_static_array:
+            if dep_types.uses_array:
                 std_includes.append("array")
-            if dep_types.uses_boolean_static_array:
-                std_includes.append("bitset")
-        if dep_types.uses_union and self.has_variant:
-            std_includes.append("variant")
-        includes_formatted = [f"<{include}>" for include in sorted(std_includes)]
-
-        allocator_include = str(self.get_option("allocator_include", ""))
-        if len(allocator_include) > 0:
-            includes_formatted.append(allocator_include)
-
-        if dep_types.uses_variable_length_array:
-            variable_array_include = str(self.get_option("variable_array_type_include", ""))
-            if len(variable_array_include) > 0:
-                includes_formatted.append(variable_array_include)
-
-        return includes_formatted
+            if dep_types.uses_variable_length_array:
+                std_includes.append("vector")
+            if dep_types.uses_union and self._has_variant():
+                std_includes.append("variant")
+        return ["<{}>".format(include) for include in sorted(std_includes)]
 
     def filter_id(self, instance: typing.Any, id_type: str = "any") -> str:
         raw_name = self.default_filter_id_for_target(instance)
 
-        return self._token_encoder.strop(raw_name, id_type)
-
-    def create_bitset_decl(self, max_size: int) -> str:
-        return f"std::bitset<{max_size}>"
-
-    def create_array_decl(self, data_type: str, max_size: int) -> str:
-        return f"std::array<{data_type},{max_size}>"
-
-    def create_vla_decl(self, data_type: str, max_size: int) -> str:
-        variable_array_type_template = self.get_option("variable_array_type_template")
-        if not isinstance(variable_array_type_template, str) or len(variable_array_type_template) == 0:
-            raise RuntimeError("You must specify a value for the 'variable_array_type_template' option.")
-        rebind_allocator = f"std::allocator_traits<allocator_type>::rebind_alloc<{data_type}>"
-        return variable_array_type_template.format(TYPE=data_type, MAX_SIZE=max_size, REBIND_ALLOCATOR=rebind_allocator)
+        return self._get_token_encoder().strop(raw_name, id_type)
 
 
 @template_language_test(__name__)
@@ -457,47 +159,17 @@ def uses_std_variant(language: Language) -> bool:
         .. invisible-code-block: python
 
             # test c++17
-            options = {"std": "c++17"}
-            lctx = (
-                LanguageContextBuilder(include_experimental_languages=True)
-                    .set_target_language("cpp")
-                    .set_target_language_configuration_override(Language.WKCV_LANGUAGE_OPTIONS, options)
-                    .create()
-            )
+            config_overrides = {'nunavut.lang.cpp': {'options': {'std': 'c++17' }}}
+            lctx = configurable_language_context_factory(config_overrides, 'cpp')
             jinja_filter_tester(None, template, '#include <variant>', lctx)
 
             # test c++14
-            options = {"std": "c++14"}
-            lctx = (
-                LanguageContextBuilder(include_experimental_languages=True)
-                    .set_target_language("cpp")
-                    .set_target_language_configuration_override(Language.WKCV_LANGUAGE_OPTIONS, options)
-                    .create()
-            )
+            config_overrides = {'nunavut.lang.cpp': {'options': {'std': 'c++14' }}}
+            lctx = configurable_language_context_factory(config_overrides, 'cpp')
             jinja_filter_tester(None, template, '#include "user_variant.h"', lctx)
 
     """
-    return language.has_variant
-
-
-@template_language_test(__name__)
-def uses_cetl(language: Language) -> bool:
-    """
-    Uses query for Cyphal Embedded Template Library.
-
-    If this is true then CETL is used to ensure compatibility back to C++14.
-    """
-    return language.standard_flavor == "cetl"
-
-
-@template_language_test(__name__)
-def uses_pmr(language: Language) -> bool:
-    """
-    Uses query for C++17 Polymorphic Memory Resources.
-
-    If this is true then additional C++ code is generated to support the use of polymorphic memory resources.
-    """
-    return language.standard_flavor == "pmr"
+    return language._has_variant()
 
 
 @template_language_filter(__name__)
@@ -713,20 +385,10 @@ def filter_open_namespace(
 
         # stropping doesn't change our example here.
 
-        lctx = (
-            LanguageContextBuilder(include_experimental_languages=True)
-                .set_target_language("cpp")
-                .set_target_language_configuration_override(Language.WKCV_ENABLE_STROPPING, False)
-                .create()
-        )
+        lctx = configurable_language_context_factory({'nunavut.lang.cpp': {'enable_stropping': False}}, 'cpp')
         jinja_filter_tester(filter_open_namespace, template, rendered, lctx, T=T)
 
-        lctx = (
-            LanguageContextBuilder(include_experimental_languages=True)
-                .set_target_language("cpp")
-                .set_target_language_configuration_override(Language.WKCV_ENABLE_STROPPING, True)
-                .create()
-        )
+        lctx = configurable_language_context_factory({'nunavut.lang.cpp': {'enable_stropping': True}}, 'cpp')
         jinja_filter_tester(filter_open_namespace, template, rendered, lctx, T=T)
 
     :param str full_namespace: A dot-separated namespace string.
@@ -925,7 +587,6 @@ def filter_short_reference_name(language: Language, t: pydsdl.CompositeType) -> 
         my_type = MagicMock(spec=pydsdl.StructureType)
         my_type.version = MagicMock()
         my_type.parent_service = None
-        my_type.has_parent_service = False
 
     .. code-block:: python
 
@@ -947,11 +608,10 @@ def filter_short_reference_name(language: Language, t: pydsdl.CompositeType) -> 
         my_type = MagicMock(spec=pydsdl.StructureType)
         my_type.version = MagicMock()
         my_type.parent_service = None
-        my_type.has_parent_service = False
 
     .. code-block:: python
 
-        # Given a type with legal C++ characters
+        # Given a type with illegal C++ characters
         my_type.short_name = 'Struct_'
         my_type.version.major = 0
         my_type.version.minor = 1
@@ -966,113 +626,25 @@ def filter_short_reference_name(language: Language, t: pydsdl.CompositeType) -> 
 
         jinja_filter_tester(filter_short_reference_name, template, rendered, 'cpp', my_type=my_type)
 
-    .. invisible-code-block: python
-        my_service_type = MagicMock(spec=pydsdl.ServiceType)
-        my_service_type.version = MagicMock()
-        my_service_type.parent_service = None
-        my_service_type.has_parent_service = False
-        my_service_type.request_type = MagicMock(spec=pydsdl.StructureType)
-        my_service_type.request_type.has_parent_service = True
-        my_service_type.request_type.short_name = "Request"
-        my_service_type.request_type.version = my_service_type.version
-        my_service_type.request_type.parent_service = my_service_type
-        my_service_type.response_type = MagicMock(spec=pydsdl.StructureType)
-        my_service_type.response_type.has_parent_service = True
-        my_service_type.response_type.short_name = "Response"
-        my_service_type.response_type.version = my_service_type.version
-        my_service_type.response_type.parent_service = my_service_type
-
-    .. code-block:: python
-
-        # Given a service type
-        my_service_type.short_name = 'Struct_'
-        my_service_type.version.major = 0
-        my_service_type.version.minor = 1
-
-        # and
-        template = '''
-        {{ my_service_type | short_reference_name }}
-        {{ my_service_type.request_type | short_reference_name }}
-        {{ my_service_type.response_type | short_reference_name }}
-        '''
-
-        # then, with stropping enabled
-        rendered = '''
-        Struct_
-        Request_0_1
-        Response_0_1
-        '''
-
-    .. invisible-code-block: python
-        jinja_filter_tester(filter_short_reference_name, template, rendered, 'cpp', my_service_type=my_service_type)
+        my_type = MagicMock(spec=pydsdl.StructureType)
+        my_type.version = MagicMock()
+        my_type.parent_service = None
 
     :param pydsdl.CompositeType t: The DSDL type to get the reference name for.
     """
-    if isinstance(t, pydsdl.ServiceType):
-        if YesNoDefault.test_truth(YesNoDefault.DEFAULT, language.enable_stropping):
-            return language.filter_id(t.short_name)
-        return str(t.short_name)
     return language.filter_short_reference_name(t)
 
 
 @template_language_list_filter(__name__)
-@template_environment_list_filter
-def filter_includes(
-    language: Language, env: Environment, t: pydsdl.CompositeType, sort: bool = True
-) -> typing.List[str]:
+def filter_includes(language: Language, t: pydsdl.CompositeType, sort: bool = True) -> typing.List[str]:
     """
     Returns a list of all include paths for a given type.
 
     :param pydsdl.CompositeType t: The type to scan for dependencies.
     :param bool sort: If true the returned list will be sorted.
     :return: a list of include headers needed for a given type.
-
-
-    .. invisible-code-block: python
-
-        from nunavut.lang.cpp import filter_includes
-        from unittest.mock import MagicMock
-        import pydsdl
-
-        my_type = MagicMock(spec=pydsdl.UnionType)
-        my_type.version = MagicMock()
-        my_type.parent_service = None
-
-    .. code-block:: python
-
-        # Listing the includes for a union with only integer types:
-        template = "{% for include in my_type | includes -%}{{include}}{%- endfor %}"
-
-        # cstdint will normally be generated. limits is always generated.
-        rendered = "<cstdint><limits>"
-
-    .. invisible-code-block: python
-
-        jinja_filter_tester(filter_includes, template, rendered, "cpp", my_type=my_type)
-
-    .. code-block:: python
-
-        # You can suppress std includes by setting use_standard_types to False under
-        # nunavut.lang.cpp
-        rendered = "<limits>"
-
-    .. invisible-code-block: python
-
-        lctx = (
-            LanguageContextBuilder(include_experimental_languages=True)
-                .set_target_language("cpp")
-                .set_target_language_configuration_override("use_standard_types", False)
-                .create()
-        )
-        jinja_filter_tester(filter_includes, template, rendered, lctx, my_type=my_type)
     """
-    try:
-        omit_serialization_support = env.globals["nunavut"].support["omit"]
-    except KeyError:
-        omit_serialization_support = False
-    return IncludeGenerator(language, t, omit_serialization_support).generate_include_filepart_list(
-        language.extension, sort
-    )
+    return IncludeGenerator(language, t).generate_include_filepart_list(language.extension, sort)
 
 
 @template_language_filter(__name__)
@@ -1119,154 +691,180 @@ def filter_destructor_name(language: Language, instance: pydsdl.Any) -> str:
 
 
 @template_language_filter(__name__)
-def filter_explicit_decorator(language: Language, instance: pydsdl.Any, special_method: SpecialMethod) -> str:
-    """
-    Emit the constructor name, decorated with "explicit" if it has only one argument
-    """
-    name: str = language.filter_short_reference_name(instance)
-    arg_count: int = len(instance.fields_except_padding) + (
-        0 if language.get_option("allocator_is_default_constructible") else 1
-    )
-    if special_method == SpecialMethod.INITIALIZING_CONSTRUCTOR_WITH_ALLOCATOR and arg_count == 1:
-        return f"explicit {name}"
-    return f"{name}"
-
-
-@template_language_filter(__name__)
-def filter_default_value_initializer(language: Language, instance: pydsdl.Any) -> str:
-    # pylint: disable=unused-argument
-    """
-    Emit a default initialization expression for the given instance if primitive, array,
-    or composite.
-    """
-    if (
-        isinstance(instance, pydsdl.PrimitiveType)
-        or isinstance(instance, pydsdl.ArrayType)
-        or isinstance(instance, pydsdl.CompositeType)
-    ):
-        return "{}"
-    return ""
-
-
-def needs_initializing_value(special_method: SpecialMethod) -> bool:
-    """Helper method used by filter_value_initializer()"""
-    return special_method == SpecialMethod.INITIALIZING_CONSTRUCTOR_WITH_ALLOCATOR or needs_rhs(special_method)
-
-
-def needs_rhs(special_method: SpecialMethod) -> bool:
-    """Helper method used by filter_value_initializer()"""
-    return special_method in (
-        SpecialMethod.COPY_CONSTRUCTOR_WITH_ALLOCATOR,
-        SpecialMethod.MOVE_CONSTRUCTOR_WITH_ALLOCATOR,
-    )
-
-
-def needs_allocator(instance: pydsdl.Any) -> bool:
-    """Helper method used by filter_value_initializer()"""
-    return isinstance(instance.data_type, pydsdl.VariableLengthArrayType) or isinstance(
-        instance.data_type, pydsdl.CompositeType
-    )
-
-
-def needs_vla_init_args(instance: pydsdl.Any, special_method: SpecialMethod) -> bool:
-    """Helper method used by filter_value_initializer()"""
-    return special_method == SpecialMethod.ALLOCATOR_CONSTRUCTOR and isinstance(
-        instance.data_type, pydsdl.VariableLengthArrayType
-    )
-
-
-def needs_move(special_method: SpecialMethod) -> bool:
-    """Helper method used by filter_value_initializer()"""
-    return special_method == SpecialMethod.MOVE_CONSTRUCTOR_WITH_ALLOCATOR
-
-
-def requires_initialization(instance: pydsdl.Any) -> bool:
-    """Helper method used by filter_value_initializer()"""
-    return (
-        isinstance(instance.data_type, pydsdl.PrimitiveType)
-        or isinstance(instance.data_type, pydsdl.ArrayType)
-        or isinstance(instance.data_type, pydsdl.CompositeType)
-    )
-
-
-def assemble_initializer_expression(
-    wrap: str, rhs: str, leading_args: typing.List[str], trailing_args: typing.List[str]
-) -> str:
-    """Helper method used by filter_value_initializer()"""
-    if wrap:
-        rhs = f"{wrap}({rhs})"
-    args = []
-    if rhs:
-        args.append(rhs)
-    args = leading_args + args + trailing_args
-    return "{" + ", ".join(args) + "}"
-
-
-@template_language_filter(__name__)
-def filter_value_initializer(language: Language, instance: pydsdl.Any, special_method: SpecialMethod) -> str:
-    """
-    Emit an initialization expression for a C++ special method.
-    """
-
-    value_initializer: str = ""
-    if requires_initialization(instance):
-        wrap: str = ""
-        rhs: str = ""
-        leading_args: typing.List[str] = []
-        trailing_args: typing.List[str] = []
-
-        if needs_initializing_value(special_method):
-            if needs_rhs(special_method):
-                rhs = "rhs."
-            rhs += language.filter_id(instance)
-
-        if needs_vla_init_args(instance, special_method):
-            constructor_args = language.get_option("variable_array_type_constructor_args")
-            if isinstance(constructor_args, str) and len(constructor_args) > 0:
-                trailing_args.append(constructor_args.format(MAX_SIZE=instance.data_type.capacity))
-
-        if needs_allocator(instance):
-            if language.get_option("ctor_convention") == ConstructorConvention.USES_LEADING_ALLOCATOR.value:
-                leading_args.extend(["std::allocator_arg", "allocator"])
-            else:
-                trailing_args.append("allocator")
-
-        if needs_move(special_method):
-            wrap = "std::move"
-
-        value_initializer = assemble_initializer_expression(wrap, rhs, leading_args, trailing_args)
-
-    return value_initializer
-
-
-@template_language_filter(__name__)
-def filter_default_construction(language: Language, instance: pydsdl.Any, reference: str) -> str:
-    """
-    Emit a default construction expression for the given instance if it is a composite type.
-    """
-    if (
-        isinstance(instance, pydsdl.CompositeType)
-        and language.get_option("ctor_convention") != ConstructorConvention.DEFAULT.value
-    ):
-        return f"{reference}.get_allocator()"
-    return ""
-
-
-@template_language_filter(__name__)
 def filter_declaration(language: Language, instance: pydsdl.Any) -> str:
     """
     Emit a declaration statement for the given instance.
     """
-    if isinstance(instance, (pydsdl.PrimitiveType, pydsdl.VoidType)):
+    if isinstance(instance, pydsdl.PrimitiveType) or isinstance(instance, pydsdl.VoidType):
         return filter_type_from_primitive(language, instance)
-    if isinstance(instance, pydsdl.VariableLengthArrayType):
-        return language.create_vla_decl(filter_declaration(language, instance.element_type), instance.capacity)
-    if isinstance(instance, pydsdl.ArrayType):
-        if isinstance(instance.element_type, pydsdl.BooleanType):
-            return language.create_bitset_decl(instance.capacity)
-        return language.create_array_decl(filter_declaration(language, instance.element_type), instance.capacity)
+    elif isinstance(instance, pydsdl.VariableLengthArrayType):
+        variable_array_type = language.get_option("variable_array_type")
 
-    return filter_full_reference_name(language, instance)
+        if not isinstance(variable_array_type, str):
+            raise RuntimeError("variable_array_type language option was missing or invalid.")
+        return variable_array_type.format(
+            TYPE=filter_declaration(language, instance.element_type), MAX_SIZE=instance.capacity
+        )
+    elif isinstance(instance, pydsdl.ArrayType):
+        return DEFAULT_ARRAY_TYPE.format(
+            TYPE=filter_declaration(language, instance.element_type), MAX_SIZE=instance.capacity
+        )
+    else:
+        return filter_full_reference_name(language, instance)
+
+
+@template_language_filter(__name__)
+def filter_definition_begin(language: Language, instance: pydsdl.CompositeType) -> str:
+    """
+    Emit the start of a definition statement for a composite type.
+
+     .. invisible-code-block: python
+
+        from nunavut.lang.cpp import filter_definition_begin
+        from unittest.mock import MagicMock
+        import pytest
+        import pydsdl
+
+        my_type = MagicMock(spec=pydsdl.StructureType)
+        my_type.version = MagicMock()
+        my_type.parent_service = None
+
+        with pytest.raises(ValueError):
+            jinja_filter_tester(filter_definition_begin,
+                                '{{ my_type | definition_begin }}',
+                                '',
+                                'cpp',
+                                my_type=MagicMock())
+
+    .. code-block:: python
+
+        # Given a pydsdl.CompositeType "my_type":
+        my_type.short_name = 'Foo'
+        my_type.version.major = 1
+        my_type.version.minor = 0
+
+        # and
+        template = '{{ my_type | definition_begin }}'
+
+        # then
+        rendered = 'struct Foo_1_0'
+
+    .. invisible-code-block: python
+
+        jinja_filter_tester(filter_definition_begin, template, rendered, 'cpp', my_type=my_type)
+
+        my_union_type = MagicMock(spec=pydsdl.UnionType)
+        my_union_type.version = MagicMock()
+        my_union_type.parent_service = None
+
+    .. code-block:: python
+
+        # Also, given a pydsdl.UnionType "my_union_type":
+        my_union_type.short_name = 'Foo'
+        my_union_type.version.major = 1
+        my_union_type.version.minor = 0
+
+        # and
+        union_template = '{{ my_union_type | definition_begin }}'
+
+        # then
+        rendered = 'struct Foo_1_0'
+
+    .. invisible-code-block: python
+
+        jinja_filter_tester(filter_definition_begin, union_template, rendered, 'cpp', my_union_type=my_union_type)
+
+        my_service_type = MagicMock(spec=pydsdl.ServiceType)
+        my_service_type.version = MagicMock()
+        my_service_type.parent_service = None
+
+    .. code-block:: python
+
+        # Finally, given a pydsdl.ServiceType "my_service_type":
+        my_service_type.short_name = 'Foo'
+        my_service_type.version.major = 1
+        my_service_type.version.minor = 0
+
+        # and
+        template = '{{ my_service_type | definition_begin }}'
+
+        # then
+        rendered = 'namespace Foo_1_0'
+
+    .. invisible-code-block: python
+
+        jinja_filter_tester(filter_definition_begin, template, rendered, 'cpp', my_service_type=my_service_type)
+
+    """
+    short_name = language.filter_short_reference_name(instance)
+    if (
+        isinstance(instance, pydsdl.DelimitedType)
+        or isinstance(instance, pydsdl.StructureType)
+        or isinstance(instance, pydsdl.UnionType)
+    ):
+        return "struct {}".format(short_name)
+    elif isinstance(instance, pydsdl.ServiceType):
+        return "namespace {}".format(short_name)
+    else:
+        raise ValueError("{} types cannot be redefined.".format(type(instance).__name__))
+
+
+@template_language_filter(__name__)
+def filter_definition_end(language: Language, instance: pydsdl.CompositeType) -> str:
+    """
+    Emit the end of a definition statement for a composite type.
+
+     .. invisible-code-block: python
+
+        from nunavut.lang.cpp import filter_definition_end
+        from unittest.mock import MagicMock
+        import pytest
+        import pydsdl
+
+
+        with pytest.raises(ValueError):
+            jinja_filter_tester(filter_definition_end, '{{ my_type | definition_end }}', '', 'cpp', my_type=MagicMock())
+
+        my_type = MagicMock(spec=pydsdl.StructureType)
+        my_type.version = MagicMock()
+        my_type.short_name = 'Foo'
+        my_type.version.major = 1
+        my_type.version.minor = 0
+
+        jinja_filter_tester(filter_definition_end, '{{ my_type | definition_end }}', ';', 'cpp', my_type=my_type)
+
+        my_type = MagicMock(spec=pydsdl.UnionType)
+        my_type.version = MagicMock()
+        my_type.short_name = 'Foo'
+        my_type.version.major = 1
+        my_type.version.minor = 0
+
+        jinja_filter_tester(filter_definition_end, '{{ my_type | definition_end }}', ';', 'cpp', my_type=my_type)
+
+        my_type = MagicMock(spec=pydsdl.ServiceType)
+        my_type.version = MagicMock()
+        my_type.parent_service = None
+        my_type.short_name = 'Foo'
+        my_type.version.major = 1
+        my_type.version.minor = 0
+
+        jinja_filter_tester(filter_definition_end,
+                            '{{ my_type | definition_end }}',
+                            ' // namespace Foo_1_0',
+                            'cpp',
+                            my_type=my_type)
+
+    """
+    if (
+        isinstance(instance, pydsdl.DelimitedType)
+        or isinstance(instance, pydsdl.StructureType)
+        or isinstance(instance, pydsdl.UnionType)
+    ):
+        return ";"
+    elif isinstance(instance, pydsdl.ServiceType):
+        return " // namespace {}".format(language.filter_short_reference_name(instance))
+    else:
+        raise ValueError("{} types cannot be redefined.".format(type(instance).__name__))
 
 
 @template_language_filter(__name__)
@@ -1307,12 +905,7 @@ def filter_type_from_primitive(language: Language, value: pydsdl.PrimitiveType) 
 
     .. invisible-code-block: python
 
-        lctx = (
-            LanguageContextBuilder(include_experimental_languages=True)
-                .set_target_language("cpp")
-                .set_target_language_configuration_override("use_standard_types", False)
-                .create()
-        )
+        lctx = configurable_language_context_factory({'nunavut.lang.cpp': {'use_standard_types': False}}, 'cpp')
         jinja_filter_tester(filter_type_from_primitive,
                             template,
                             rendered,
@@ -1363,7 +956,8 @@ def filter_to_namespace_qualifier(namespace_list: typing.List[str]) -> str:
     """
     if namespace_list is None or len(namespace_list) == 0:
         return ""
-    return "::".join(namespace_list) + "::"
+    else:
+        return "::".join(namespace_list) + "::"
 
 
 def filter_to_template_unique_name(base_token: str) -> str:
@@ -1427,7 +1021,7 @@ def filter_to_template_unique_name(base_token: str) -> str:
     else:
         adj_base_token = base_token
 
-    return UniqueNameGenerator.get_instance()("cpp", adj_base_token, "_", "_")  # pylint: disable=not-callable
+    return UniqueNameGenerator.get_instance()("cpp", adj_base_token, "_", "_")
 
 
 def filter_as_boolean_value(value: bool) -> str:
@@ -1532,7 +1126,7 @@ def filter_indent_if_not(language: Language, text: str, depth: int = 1) -> str:
     configured_indent = int(language.get_config_value("indent"))
     lines = text.splitlines(keepends=True)
     result = ""
-    for i, line in enumerate(lines):
+    for i in range(0, len(lines)):
         line = lines[i].lstrip()
         if len(line) == 0:
             # don't indent blank lines
@@ -1612,11 +1206,11 @@ def filter_minimum_required_capacity_bits(t: pydsdl.SerializableType) -> int:
 
 
 @functools.lru_cache(3)
-def _make_textwrap(width: int, initial_indent: str, subsequent_indent: str) -> textwrap.TextWrapper:
+def _make_textwrap(width: int, initial_indent: str, subseqent_indent: str) -> textwrap.TextWrapper:
     return textwrap.TextWrapper(
         width=width,
         initial_indent=initial_indent,
-        subsequent_indent=subsequent_indent,
+        subsequent_indent=subseqent_indent,
         break_on_hyphens=True,
         break_long_words=False,
         replace_whitespace=False,
@@ -1624,31 +1218,28 @@ def _make_textwrap(width: int, initial_indent: str, subsequent_indent: str) -> t
 
 
 def _make_block_comment(text: str, prefix: str, comment: str, suffix: str, indent: int, line_length: int) -> str:
-    doc_lines: typing.List[str] = text.splitlines()
-    indented_comment = f"{' ' * indent}{comment}"
+    doc_lines = text.splitlines()  # type: typing.List[str]
+    indented_comment = "{}{}".format(" " * indent, comment)
 
-    commented_doc_lines: typing.List[str] = []
+    commented_doc_lines = []  # type: typing.List[str]
 
     if len(doc_lines) > 0:
         if len(prefix) > 0:
             commented_doc_lines.append(prefix)
         else:
             commented_doc_lines.extend(
-                _make_textwrap(width=line_length, initial_indent=comment, subsequent_indent=indented_comment).wrap(
+                _make_textwrap(width=line_length, initial_indent=comment, subseqent_indent=indented_comment).wrap(
                     doc_lines.pop(0)
                 )
             )
 
-    tw = _make_textwrap(width=line_length, initial_indent=indented_comment, subsequent_indent=indented_comment)
+    tw = _make_textwrap(width=line_length, initial_indent=indented_comment, subseqent_indent=indented_comment)
 
     for docline in doc_lines:
-        # The docs for textwrap.TextWrapper.wrap say:
-        # "If the wrapped output has no content, the returned list is empty."
-        # This behavior cannot be altered so we need to work around it manually.
-        commented_doc_lines.extend(tw.wrap(docline) if docline.strip() else [indented_comment])
+        commented_doc_lines.extend(tw.wrap(docline))
 
     if len(suffix) > 0 and len(commented_doc_lines) > 0:
-        commented_doc_lines.append(f"{' ' * indent}{suffix}")
+        commented_doc_lines.append("{}{}".format(" " * indent, suffix))
 
     return "\n".join(commented_doc_lines)
 
@@ -1837,28 +1428,25 @@ def filter_block_comment(language: Language, text: str, style: str, indent: int 
 
             jinja_filter_tester(filter_block_comment, template, rendered, 'cpp', text=text)
 
-            from nunavut.lang import LanguageContextBuilder
+            from nunavut.lang import LanguageContext
 
-            comment_configs = (
-                LanguageContextBuilder(include_experimental_languages=True)
-                    .set_target_language('cpp')
-                    .create()
-                    .get_target_language()
-                    .get_config_value_as_dict('comment_styles')
-            )
+            comment_configs = LanguageContext('cpp').get_target_language().get_config_value_as_dict('comment_styles')
+
             if len(comment_configs) != 5:
                 raise RuntimeError('A comment style was added but not documented here. Please document it/them.')
 
     """
 
-    config_styles: typing.Mapping[str, typing.Mapping[str, str]] = language.get_config_value_as_dict("comment_styles")
+    config_styles = language.get_config_value_as_dict(
+        "comment_styles"
+    )  # type: typing.Mapping[str, typing.Mapping[str, str]]
 
     try:
         config_style = config_styles[style.lower()]
-    except KeyError as ke:
+    except KeyError:
         raise ValueError(
-            f"{style} is not a supported comment style. Supported is c, cpp, cpp-doxygen, and javadoc"
-        ) from ke
+            "{} is not a supported comment style. Supported is c, cpp, cpp-doxygen, and javadoc".format(style)
+        )
 
     return _make_block_comment(
         text=text,

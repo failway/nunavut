@@ -1,7 +1,7 @@
 #
-# Copyright (C) OpenCyphal Development Team  <opencyphal.org>
-# Copyright Amazon.com Inc. or its affiliates.
-# SPDX-License-Identifier: MIT
+# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright (C) 2018-2019  UAVCAN Development Team  <uavcan.org>
+# This software is distributed under the terms of the MIT License.
 #
 """
     Filters for generating C. All filters in this
@@ -10,23 +10,23 @@
 
 import enum
 import fractions
+import functools
 import re
 import typing
 
 import pydsdl
 
-from nunavut._dependencies import Dependencies
-from nunavut._templates import (
-    template_environment_list_filter,
+from nunavut._utilities import YesNoDefault
+
+from ...templates import (
     template_language_filter,
     template_language_list_filter,
     template_language_test,
     template_volatile_filter,
 )
-from nunavut._utilities import YesNoDefault, cached_property
-from nunavut.jinja.environment import Environment
-from nunavut.lang._common import IncludeGenerator, TokenEncoder, UniqueNameGenerator
-from nunavut.lang._language import Language as BaseLanguage
+from .. import Dependencies
+from .. import Language as BaseLanguage
+from .._common import IncludeGenerator, TokenEncoder, UniqueNameGenerator
 
 
 class Language(BaseLanguage):
@@ -51,8 +51,8 @@ class Language(BaseLanguage):
         # we couldn't help after all. raise the pending error.
         raise pending_error
 
-    @cached_property
-    def _token_encoder(self) -> TokenEncoder:
+    @functools.lru_cache(maxsize=None)
+    def _get_token_encoder(self) -> TokenEncoder:
         """
         Caching getter to ensure we don't have to recompile TokenEncoders for each filter invocation.
         """
@@ -71,12 +71,12 @@ class Language(BaseLanguage):
             if dep_types.uses_primitive_static_array:
                 # We include this for memset.
                 std_includes.append("string.h")
-        return [f"<{include}>" for include in sorted(std_includes)]
+        return ["<{}>".format(include) for include in sorted(std_includes)]
 
     def filter_id(self, instance: typing.Any, id_type: str = "any") -> str:
         raw_name = self.default_filter_id_for_target(instance)
 
-        vne = self._token_encoder
+        vne = self._get_token_encoder()
         return vne.strop(raw_name, id_type)
 
 
@@ -173,7 +173,7 @@ def filter_macrofy(language: Language, value: str) -> str:
 
     .. invisible-code-block: python
 
-        from nunavut.lang import Language, LanguageContextBuilder
+        from nunavut.lang import LanguageContext, Language
         from nunavut.lang.c import filter_macrofy, filter_id
         from unittest.mock import MagicMock
 
@@ -237,12 +237,8 @@ def filter_macrofy(language: Language, value: str) -> str:
 
     .. invisible-code-block: python
 
-        lctx = (
-            LanguageContextBuilder()
-                .set_target_language("c")
-                .set_target_language_configuration_override(Language.WKCV_ENABLE_STROPPING, False)
-                .create()
-        )
+        config_overrides = {'nunavut.lang.c': {'enable_stropping': False }}
+        lctx = configurable_language_context_factory(config_overrides, 'c')
         jinja_filter_tester(filter_macrofy, template, rendered, lctx)
 
     :param str value: The value to transform.
@@ -285,7 +281,7 @@ class _CFit(enum.Enum):
         return intname
 
     def to_c_float(self) -> str:
-        if self.value in (8, 16, 32):
+        if self.value == 8 or self.value == 16 or self.value == 32:
             return "float"
         else:
             return "double"
@@ -302,7 +298,7 @@ class _CFit(enum.Enum):
         elif isinstance(value, pydsdl.FloatType):
             return self.to_c_float()
         elif isinstance(value, pydsdl.BooleanType):
-            return language.named_types["boolean"]
+            return language.get_named_types()["boolean"]
         elif isinstance(value, pydsdl.VoidType):
             return "void"
         else:
@@ -616,12 +612,8 @@ def filter_short_reference_name(language: Language, t: pydsdl.CompositeType) -> 
 
     .. invisible-code-block: python
 
-        lctx = (
-            LanguageContextBuilder()
-                .set_target_language("c")
-                .set_target_language_configuration_override(Language.WKCV_ENABLE_STROPPING, False)
-                .create()
-        )
+        config_overrides = {'nunavut.lang.c': {'enable_stropping': False }}
+        lctx = configurable_language_context_factory(config_overrides, 'c')
         jinja_filter_tester(filter_short_reference_name, template, rendered, lctx, my_type=my_type)
 
     :param pydsdl.CompositeType t: The DSDL type to get the reference name for.
@@ -630,10 +622,7 @@ def filter_short_reference_name(language: Language, t: pydsdl.CompositeType) -> 
 
 
 @template_language_list_filter(__name__)
-@template_environment_list_filter
-def filter_includes(
-    language: Language, env: Environment, t: pydsdl.CompositeType, sort: bool = True
-) -> typing.List[str]:
+def filter_includes(language: Language, t: pydsdl.CompositeType, sort: bool = True) -> typing.List[str]:
     """
     Returns a list of all include paths for a given type.
 
@@ -672,25 +661,16 @@ def filter_includes(
 
     .. invisible-code-block: python
 
-        lctx = (
-            LanguageContextBuilder()
-                .set_target_language("c")
-                .set_target_language_configuration_override("use_standard_types", False)
-                .create()
-        )
+        config_overrides = {'nunavut.lang.c': {'use_standard_types': False}}
+        lctx = configurable_language_context_factory(config_overrides, 'c')
         jinja_filter_tester(filter_includes, template, rendered, lctx, my_type=my_type)
 
     :param pydsdl.CompositeType t: The type to scan for dependencies.
     :param bool sort: If true the returned list will be sorted.
     :return: a list of include headers needed for a given type.
     """
-    try:
-        omit_serialization_support = env.globals["nunavut"].support["omit"]
-    except KeyError:
-        omit_serialization_support = False
-    return IncludeGenerator(language, t, omit_serialization_support).generate_include_filepart_list(
-        language.extension, sort
-    )
+
+    return IncludeGenerator(language, t).generate_include_filepart_list(language.extension, sort)
 
 
 def filter_to_static_assertion_value(obj: typing.Any) -> int:
@@ -811,13 +791,8 @@ def filter_constant_value(language: Language, constant: pydsdl.Constant) -> str:
 
     .. invisible-code-block: python
 
-        named_values = {'true': 'NUNAVUT_TRUE'}
-        lctx = (
-            LanguageContextBuilder()
-                .set_target_language("c")
-                .set_target_language_configuration_override(Language.WKCV_NAMED_VALUES, named_values)
-                .create()
-        )
+        config_overrides = {'nunavut.lang.c': {'named_values': {'true': 'NUNAVUT_TRUE'}}}
+        lctx = configurable_language_context_factory(config_overrides, 'c')
         jinja_filter_tester(filter_constant_value, template, rendered, lctx, my_true_constant=my_true_constant)
 
 
@@ -1015,14 +990,8 @@ def is_zero_cost_primitive(language: Language, t: pydsdl.PrimitiveType) -> bool:
         rendered = 'False True False True False'
 
     .. invisible-code-block: python
-
-        options = {'target_endianness': 'little'}
-        lctx = (
-            LanguageContextBuilder()
-                .set_target_language("c")
-                .set_target_language_configuration_override(Language.WKCV_LANGUAGE_OPTIONS, options)
-                .create()
-        )
+        config_overrides = {'nunavut.lang.c': {'options': {'target_endianness': 'little' }}}
+        lctx = configurable_language_context_factory(config_overrides, 'c')
         jinja_filter_tester(is_zero_cost_primitive, template, rendered, lctx, i7=i7, u32=u32, f16=f16, f32=f32, bl=bl)
 
         # ensure unknown types given to test raise a TypeError
@@ -1033,13 +1002,8 @@ def is_zero_cost_primitive(language: Language, t: pydsdl.PrimitiveType) -> bool:
             pass
 
         # big endian is never zero cost.
-        options = {'target_endianness': 'big'}
-        lctx = (
-            LanguageContextBuilder()
-                .set_target_language("c")
-                .set_target_language_configuration_override(Language.WKCV_LANGUAGE_OPTIONS, options)
-                .create()
-        )
+        config_overrides = {'nunavut.lang.c': {'options': {'target_endianness': 'big'}}}
+        lctx = configurable_language_context_factory(config_overrides, 'c')
         jinja_filter_tester(is_zero_cost_primitive,
                             template,
                             'False False False False False',
@@ -1087,13 +1051,8 @@ def filter_is_zero_cost_primitive(language: Language, t: pydsdl.PrimitiveType) -
 
     .. invisible-code-block: python
 
-        options = {'target_endianness': 'little'}
-        lctx = (
-            LanguageContextBuilder()
-                .set_target_language("c")
-                .set_target_language_configuration_override(Language.WKCV_LANGUAGE_OPTIONS, options)
-                .create()
-        )
+        config_overrides = {'nunavut.lang.c': {'options': {'target_endianness': 'little' }}}
+        lctx = configurable_language_context_factory(config_overrides, 'c')
 
         jinja_filter_tester(filter_is_zero_cost_primitive, deprecated_template, 'True', lctx, u32=u32)
         jinja_filter_tester(is_zero_cost_primitive, correct_template, 'True', lctx, u32=u32)

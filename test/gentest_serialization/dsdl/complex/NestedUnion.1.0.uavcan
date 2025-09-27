@@ -1,0 +1,6 @@
+@union
+uint32[2] a
+uint16 b
+uint8 c
+
+@sealed

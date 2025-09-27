@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 OpenCyphal Development Team.
+ * Copyright (c) 2022 UAVCAN Development Team.
  * Authors: Pavel Pletenev <cpp.create@gmail.com>
  * This software is distributed under the terms of the MIT License.
  *
@@ -9,55 +9,8 @@
 #include "test_helpers.hpp"
 #include "uavcan/time/TimeSystem_0_1.hpp"
 #include "regulated/basics/Struct__0_1.hpp"
-#include "regulated/basics/Service_0_1.hpp"
 #include "regulated/basics/Primitive_0_1.hpp"
 
-
-static_assert(
-    not regulated::basics::Struct__0_1::_traits_::IsServiceType,
-    "Regular types are not service types");
-
-static_assert(
-    regulated::basics::Service_0_1::Request::_traits_::IsServiceType,
-    "Request is a service type");
-static_assert(
-    regulated::basics::Service_0_1::Response::_traits_::IsServiceType,
-    "Response is a service type");
-static_assert(
-    regulated::basics::Service_0_1::_traits_::IsServiceType,
-    "Service is a service type");
-
-static_assert(
-    not regulated::basics::Service_0_1::Request::_traits_::IsService,
-    "Request is not a service");
-static_assert(
-    not regulated::basics::Service_0_1::Response::_traits_::IsService,
-    "Response is not a service");
-static_assert(
-    regulated::basics::Service_0_1::_traits_::IsService,
-    "Service is a service");
-
-
-static_assert(
-    regulated::basics::Service_0_1::Request::_traits_::IsRequest,
-    "Request is a request");
-static_assert(
-    not regulated::basics::Service_0_1::Response::_traits_::IsRequest,
-    "Response is not a request");
-static_assert(
-    not regulated::basics::Service_0_1::_traits_::IsRequest,
-    "Service is not a request");
-
-
-static_assert(
-    not regulated::basics::Service_0_1::Request::_traits_::IsResponse,
-    "Request is not a response");
-static_assert(
-    regulated::basics::Service_0_1::Response::_traits_::IsResponse,
-    "Response is a response");
-static_assert(
-    not regulated::basics::Service_0_1::_traits_::IsResponse,
-    "Service is not a response");
 
 
 TEST(Serialization, BasicSerialize) {
@@ -66,7 +19,7 @@ TEST(Serialization, BasicSerialize) {
     {
         a.value = 1;
         std::fill(std::begin(buffer), std::end(buffer), 0xAA);
-        const auto result = serialize(a, buffer);
+        const auto result = a.serialize({{buffer}});
         ASSERT_TRUE(result);
         ASSERT_EQ(1U, *result);
         ASSERT_EQ(1U, buffer[0]);
@@ -75,7 +28,7 @@ TEST(Serialization, BasicSerialize) {
     {
         a.value = 0xFF;
         std::fill(std::begin(buffer), std::end(buffer), 0xAA);
-        const auto result = serialize(a, buffer);
+        const auto result = a.serialize({{buffer}});
         ASSERT_TRUE(result);
         ASSERT_EQ(1U, *result);
         ASSERT_EQ(0x0FU, buffer[0]);
@@ -137,48 +90,37 @@ TEST(Serialization, StructReference)
     obj.i10_4[1] = -0x6666;                             // saturates to -512
     obj.i10_4[2] = +0x0055;                             // original value retained
     obj.i10_4[3] = -0x00AA;                             // original value retained
-    obj.f16_le2.reserve(2);
-    obj.f16_le2.push_back(-1e9F);                       // saturated to -65504
-    ASSERT_EQ(1U, obj.f16_le2.size());
-    obj.f16_le2.push_back(+INFINITY);                   // infinity retained
+    obj.f16_le2.emplace_back(-1e9F);                    // saturated to -65504
+    obj.f16_le2.emplace_back(+INFINITY);                // infinity retained
     ASSERT_EQ(2U, obj.f16_le2.size());
-    //obj.unaligned_bitpacked_3[0] = 0xF5;              // 0b101, rest truncated away and ignored TODO:Fix
+    //obj.unaligned_bitpacked_3[0] = 0xF5;     // 0b101, rest truncated away and ignored TODO:Fix
     obj.unaligned_bitpacked_3[0] = 1;
     obj.unaligned_bitpacked_3[1] = 0;
     obj.unaligned_bitpacked_3[2] = 1;
-    //obj.sealed = 123;                                 // ignored
-    obj.bytes_lt3.reserve(2);
-    obj.bytes_lt3.push_back(111);
-    ASSERT_EQ(1U, obj.bytes_lt3.size());
-    obj.bytes_lt3.push_back(222);
+    //obj.sealed = 123;                           // ignored
+    obj.bytes_lt3.emplace_back(111);
+    obj.bytes_lt3.emplace_back(222);
     ASSERT_EQ(2U, obj.bytes_lt3.size());
     obj.bytes_3[0] = -0x77;
     obj.bytes_3[1] = -0x11;
     obj.bytes_3[2] = +0x77;
-    obj.u2_le4.reserve(3);
-    obj.u2_le4.push_back(0x02);                         // retained
-    ASSERT_EQ(1U, obj.u2_le4.size());
-    obj.u2_le4.push_back(0x11);                         // truncated => 1
-    ASSERT_EQ(2U, obj.u2_le4.size());
-    obj.u2_le4.push_back(0xFF);                         // truncated => 3
+    obj.u2_le4.emplace_back(0x02);                      // retained
+    obj.u2_le4.emplace_back(0x11);                      // truncated => 1
+    obj.u2_le4.emplace_back(0xFF);                      // truncated => 3
+    //obj.u2_le4.emplace_back(0xFF);                      // ignored because the length is 3
     ASSERT_EQ(3U, obj.u2_le4.size());
-    //obj.u2_le4.push_back(0xFF);                       // ignored because the length is 3
-    obj.delimited_fix_le2.reserve(1);
-    obj.delimited_fix_le2.push_back({});                // ignored
+    obj.delimited_fix_le2.emplace_back();    // ignored
     ASSERT_EQ(1U, obj.delimited_fix_le2.size());
     obj.u16_2[0] = 0x1234;
     obj.u16_2[1] = 0x5678;
     obj.aligned_bitpacked_3[0] = 0xF1U;
     // obj.unaligned_bitpacked_lt3.bitpacked[0] = 0xF1U;
-    obj.unaligned_bitpacked_lt3.reserve(2);
-    obj.unaligned_bitpacked_lt3.push_back(1);
-    ASSERT_EQ(1U, obj.unaligned_bitpacked_lt3.size());
-    obj.unaligned_bitpacked_lt3.push_back(0);
-    ASSERT_EQ(2U, obj.unaligned_bitpacked_lt3.size()); // 0b01, rest truncated
-    obj.delimited_var_2[0].set_f16(+1e9F);             // truncated to infinity
-    obj.delimited_var_2[1].set_f64(-1e40);             // retained
-    obj.aligned_bitpacked_le3.reserve(1);
-    obj.aligned_bitpacked_le3.push_back(1);
+    obj.unaligned_bitpacked_lt3.emplace_back(1);
+    obj.unaligned_bitpacked_lt3.emplace_back(0);
+    ASSERT_EQ(2U, obj.unaligned_bitpacked_lt3.size());              // 0b01, rest truncated
+    obj.delimited_var_2[0].set_f16(+1e9F);    // truncated to infinity
+    obj.delimited_var_2[1].set_f64(-1e40);    // retained
+    obj.aligned_bitpacked_le3.emplace_back(1);
     ASSERT_EQ(1U, obj.aligned_bitpacked_le3.size());                // only lsb is set, other truncated
 
     const uint8_t reference[] = {
@@ -255,7 +197,7 @@ TEST(Serialization, StructReference)
     uint8_t buf[sizeof(reference)];
     (void) memset(&buf[0], 0x55U, sizeof(buf));  // fill out canaries
 
-    auto result = serialize(obj, buf);
+    auto result = obj.serialize({{buf, sizeof(buf)}});
     ASSERT_TRUE(result) << "Error is " << static_cast<int>(result.error());
 
     EXPECT_EQ(sizeof(reference) - 16U, result.value());
@@ -317,9 +259,7 @@ TEST(Serialization, StructReference)
     ASSERT_EQ(0U, obj.aligned_bitpacked_le3.size());
 
     // // Deserialize the above reference representation and compare the result against the original object.
-    obj.regulated::basics::Struct__0_1::~Struct__0_1();
-    new (&obj)regulated::basics::Struct__0_1();
-    result = deserialize(obj, reference);
+    result = obj.deserialize({{reference}, 0U});
     ASSERT_TRUE(result) << "Error was " << result.error();
     ASSERT_EQ(sizeof(reference) - 16U, result.value());   // 16 trailing bytes implicitly truncated away
 
@@ -356,9 +296,7 @@ TEST(Serialization, StructReference)
     // ASSERT_EQ(1, obj.aligned_bitpacked_le3.bitpacked[0]);       // unused MSB are zero-padded
 
     // Repeat the above, but apply implicit zero extension somewhere in the middle.
-    obj.regulated::basics::Struct__0_1::~Struct__0_1();
-    new (&obj)regulated::basics::Struct__0_1();
-    result = deserialize(obj, {reference, 25U, 0U});
+    result = obj.deserialize({{reference, 25U}, 0U});
     ASSERT_TRUE(result) << "Error was " << result.error();
     ASSERT_EQ(25U, result.value());   // the returned size shall not exceed the buffer size
 
@@ -436,18 +374,18 @@ TEST(Serialization, Primitive)
         ref.n_f32  = randF32();
         ref.n_f16  = randF16();
 
-        uint8_t buf[regulated::basics::Primitive_0_1::_traits_::SerializationBufferSizeBytes];
+        uint8_t buf[regulated::basics::Primitive_0_1::SERIALIZATION_BUFFER_SIZE_BYTES];
         std::memset(buf, 0, sizeof(buf));
-        auto result = serialize(ref, buf);
+        auto result = ref.serialize({{buf, sizeof(buf)}});
         ASSERT_TRUE(result) << "Error is " << result.error();
         ASSERT_EQ(
-            static_cast<size_t>(regulated::basics::Primitive_0_1::_traits_::SerializationBufferSizeBytes), result.value());
+            static_cast<size_t>(regulated::basics::Primitive_0_1::SERIALIZATION_BUFFER_SIZE_BYTES), result.value());
 
         regulated::basics::Primitive_0_1 obj;
-        result = deserialize(obj, buf);
+        result = obj.deserialize({ {buf, sizeof(buf)} });
         ASSERT_TRUE(result);
         EXPECT_EQ(
-            static_cast<size_t>(regulated::basics::Primitive_0_1::_traits_::SerializationBufferSizeBytes), result.value());
+            static_cast<size_t>(regulated::basics::Primitive_0_1::SERIALIZATION_BUFFER_SIZE_BYTES), result.value());
         EXPECT_EQ(hex(ref.a_u64)   , hex(obj.a_u64) );
         EXPECT_EQ(hex(ref.a_u32)   , hex(obj.a_u32) );
         EXPECT_EQ(hex(ref.a_u16)   , hex(obj.a_u16) );
@@ -484,7 +422,6 @@ TEST(Serialization, Primitive)
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wold-style-cast"
-#pragma GCC diagnostic ignored "-Wzero-as-null-pointer-constant"
 #include "regulated/zubax/actuator/esc/Status_0_1.h"
 #pragma GCC diagnostic pop
 
@@ -496,12 +433,12 @@ TEST(Serialization, CCppBackAndForth)
         // We first create a real-world structure with random data:
         regulated::zubax::actuator::esc::Status_0_1 cpp_part;
         cpp_part.index = randI8() & 0x3F;
-        cpp_part.demand_factor = randU8();
+        cpp_part.demand_factor = randI8();
         cpp_part.dc_voltage_warning = randI8() & 0x1;
         cpp_part.overload_warning = randI8() & 0x1;
         cpp_part.motor_temperature_warning = randI8() & 0x1;
         cpp_part.inverter_temperature_warning = randI8() & 0x1;
-        cpp_part.error_count = randU32();
+        cpp_part.error_count = randI32();
         cpp_part.motor_mechanical_angular_velocity.radian_per_second = randF32();
         cpp_part.motor_torque.newton_meter = randF32();
         cpp_part.motor_electrical_frequency.hertz = randF32();
@@ -511,14 +448,14 @@ TEST(Serialization, CCppBackAndForth)
         cpp_part.inverter_temperature = randF16();
 
         // We create an empty buffer to hold it's serialized structure:
-        uint8_t buf[regulated::zubax::actuator::esc::Status_0_1::_traits_::SerializationBufferSizeBytes];
+        uint8_t buf[regulated::zubax::actuator::esc::Status_0_1::SERIALIZATION_BUFFER_SIZE_BYTES];
         std::memset(buf, 0, sizeof(buf));
 
         // We serialize structure from C++
-        auto result = serialize(cpp_part, buf);
+        auto result = cpp_part.serialize({{buf, sizeof(buf)}, 0});
         ASSERT_TRUE(result) << "Error is " << result.error();
         ASSERT_EQ(
-            static_cast<size_t>(regulated::zubax::actuator::esc::Status_0_1::_traits_::SerializationBufferSizeBytes), result.value());
+            static_cast<size_t>(regulated::zubax::actuator::esc::Status_0_1::SERIALIZATION_BUFFER_SIZE_BYTES), result.value());
 
         // And deserialize in C
         regulated_zubax_actuator_esc_Status_0_1 c_parsed;
@@ -557,10 +494,10 @@ TEST(Serialization, CCppBackAndForth)
 
         // And deserialize again in C++
         regulated::zubax::actuator::esc::Status_0_1 cpp_parsed;
-        result = deserialize(cpp_parsed, buf);
+        result = cpp_parsed.deserialize({ {buf, sizeof(buf)} });
         ASSERT_TRUE(result);
         EXPECT_EQ(
-            static_cast<size_t>(regulated::zubax::actuator::esc::Status_0_1::_traits_::SerializationBufferSizeBytes),
+            static_cast<size_t>(regulated::zubax::actuator::esc::Status_0_1::SERIALIZATION_BUFFER_SIZE_BYTES),
             result.value());
 
         // Both C and C++ structures should contain equvalent data

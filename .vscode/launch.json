@@ -5,59 +5,95 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: nnvg c++",
-            "type": "debugpy",
+            "name": "Python: nnvg",
+            "type": "python",
             "request": "launch",
-            "module": "nunavut",
+            "program": "nnvg",
             "cwd": "${workspaceFolder}/src",
-            "args": ["--experimental-languages",
+            "args": ["--templates", "${workspaceFolder}/test/gentest_dsdl/templates",
+                     "--generate-namespace-types",
                      "--verbose",
                      "--outdir", "${workspaceFolder}/nunavut_out",
-                     "-l", "cpp",
-                     "${workspaceFolder}/submodules/public_regulated_data_types/uavcan"]
+                     "-l", "c",
+                     "${workspaceFolder}/test/gentest_dsdl/dsdl/uavcan"]
         },
         {
             "name": "Pytest: current test",
-            "type": "debugpy",
+            "type": "python",
             "request": "launch",
             "module": "pytest",
             "args": [
                 "--keep-generated",
-                "--rootdir=${workspaceFolder}",
                 "${file}"
             ],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "name": "Pytest: all doc tests",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "pytest",
-            "args": [
-                "--keep-generated",
-                "--rootdir=${workspaceFolder}",
-                "${workspaceFolder}/src"
-            ],
+            "console": "internalConsole",
             "cwd": "${workspaceFolder}"
         },
         {
             "name": "Pytest: all tests",
-            "type": "debugpy",
+            "type": "python",
             "request": "launch",
             "module": "pytest",
+            "console": "internalConsole",
             "cwd": "${workspaceFolder}"
         },
         {
-            "type": "lldb",
+            "name": "Verification: test_var_len_arr",
+            "type": "cppdbg",
             "request": "launch",
-            "program": "${command:cmake.launchTargetPath}",
-            "name": "lldb: cmake.launchTargetPath",
-            "args": [],
+            "program": "${workspaceRoot}/verification/build_vscode/native-gcc-cpp/suite/test_var_len_arr",
             "cwd": "${workspaceFolder}",
-            "initCommands": ["settings set target.process.thread.step-avoid-regexp \"\""],
-            "env": {
-                "PATH": "$PATH:${command:cmake.launchTargetDirectory}",
-            },
+            "osx": {
+                "MIMode": "lldb",
+                "externalConsole": false
+            }
+        },
+        {
+            "name": "Verification: test_support",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceRoot}/verification/build_vscode/linux-gcc-c/suite/test_support",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Verification: test_serialization",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceRoot}/verification/build_vscode/linux-gcc-c/suite/test_serialization",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Verification(clang): test_constant",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceRoot}/verification/build_vscode/native-clang-c/suite/test_constant",
+            "cwd": "${workspaceFolder}",
+            "osx": {
+                "MIMode": "lldb",
+                "externalConsole": false
+            }
+        },
+        {
+            "name": "Verification(clang): test_support",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceRoot}/verification/build_vscode/native-clang-c/suite/test_support",
+            "cwd": "${workspaceFolder}",
+            "osx": {
+                "MIMode": "lldb",
+                "externalConsole": false
+            }
+        },
+        {
+            "name": "Verification (clang): test_serialization",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceRoot}/verification/build_vscode/native-clang-c/suite/test_serialization",
+            "cwd": "${workspaceFolder}",
+            "osx": {
+                "MIMode": "lldb",
+                "externalConsole": false
+            }
         }
     ]
 }

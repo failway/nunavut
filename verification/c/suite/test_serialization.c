@@ -1,4 +1,4 @@
-// Copyright (c) 2020 OpenCyphal Development Team.
+// Copyright (c) 2020 UAVCAN Development Team.
 // This software is distributed under the terms of the MIT License.
 
 #include <regulated/basics/Struct__0_1.h>
@@ -853,7 +853,7 @@ static void testPrimitiveArrayVariable(void)
  */
 static void testIssue221(void)
 {
-    uint8_t buf[regulated_basics_Primitive_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_] = {0};
+    uint8_t buf[regulated_basics_Primitive_0_1_SERIALIZATION_BUFFER_SIZE_BYTES_];
     const size_t fixed_size = sizeof(buf);
     size_t size = fixed_size;
 

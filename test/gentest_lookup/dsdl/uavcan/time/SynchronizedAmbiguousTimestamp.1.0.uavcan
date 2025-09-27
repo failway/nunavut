@@ -1,0 +1,7 @@
+#
+# This is a test Dummy. NOT the real type.
+#
+
+truncated uint24 decamicrosecond
+
+@sealed

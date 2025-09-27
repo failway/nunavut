@@ -1,23 +1,17 @@
 #
-# Copyright (C) OpenCyphal Development Team  <opencyphal.org>
-# Copyright Amazon.com Inc. or its affiliates.
-# SPDX-License-Identifier: MIT
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright (C) 2018-2020  UAVCAN Development Team  <uavcan.org>
+# This software is distributed under the terms of the MIT License.
 #
-"""
-Logic for parsing language configuration.
+"""Logic for parsing language configuration.
+
 """
 import re
 import types
 import typing
 
-from yaml import SafeLoader as YamlLoader
+from yaml import Loader as YamlLoader
 from yaml import load as yaml_loader
-
-from nunavut._utilities import deep_update, no_default_value
-
-# +-------------------------------------------------------------------------------------------------------------------+
-# | LANGUAGE CONFIGURATION
-# +-------------------------------------------------------------------------------------------------------------------+
 
 
 class LanguageConfig:
@@ -42,11 +36,10 @@ class LanguageConfig:
         '''
 
     .. invisible-code-block: python
-
         from nunavut.lang import LanguageConfig
 
         config = LanguageConfig()
-        config.update_from_yaml_string(example_yaml)
+        config.read_string(example_yaml)
 
         data = config.sections()
         assert len(data) == 3
@@ -74,17 +67,14 @@ class LanguageConfig:
 
     .. invisible-code-block: python
 
-        config.update_from_yaml_string(example_yaml)
+        config.read_string(example_yaml)
         assert 'a_dictionary' == config.sections()['nunavut.lang.d']['key_one'][2]['list']['is']
 
     """
 
-    SECTION_NAME_PATTERN = re.compile(
-        r"^nunavut\.lang\.([a-zA-Z]{1}\w*)$"
-    )  #: Required pattern for section name identifiers.
-
     def __init__(self):  # type: ignore
-        self._sections: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
+        self._section_name_pattern = re.compile(r"^nunavut\.lang\.([a-zA-Z]{1}\w*)$")
+        self._sections = dict()  # type: typing.Dict[str, typing.Dict[str, typing.Any]]
 
     def update(self, configuration: typing.Any) -> None:
         """
@@ -214,101 +204,47 @@ class LanguageConfig:
         for section_name, section_data in configuration.items():
             if not isinstance(section_name, str):
                 raise TypeError("section names must be strings")
-            if not self.SECTION_NAME_PATTERN.match(section_name):
+            if not self._section_name_pattern.match(section_name):
                 raise ValueError(
-                    f'Section name "{section_name}" is invalid. See LanguageConfig documentation for rules.'
+                    'Section name "{}" is invalid. See LanguageConfig documentation for rules.'.format(section_name)
                 )
-            self.update_section(section_name, section_data)
-
-    def update_section(self, section_name: str, configuration: typing.Any) -> None:
-        """
-        Update a section of the configuration.
-        """
-        self._sections[section_name] = deep_update(self._sections.get(section_name, {}), configuration)
+            try:
+                section = self._sections[section_name]
+            except KeyError:
+                self._sections[section_name] = dict()
+                section = self._sections[section_name]
+            section.update(section_data)
 
     def sections(self) -> typing.Dict[str, typing.Dict[str, typing.Any]]:
-        """
-        Get all sections of the configuration.
-        """
         return self._sections
 
-    def update_from_yaml_string(self, string: str) -> None:
-        """
-        Update the configuration from a yaml string.
-        Calls :meth:`update` with the parsed yaml data and will raise the same exceptions.
-        """
+    def read_string(self, string: str, context: typing.Optional[str] = None) -> None:
         configuration = yaml_loader(string, Loader=YamlLoader)
         self.update(configuration)
 
-    def update_from_yaml_file(self, f: typing.TextIO) -> None:
-        """
-        Update the configuration from a yaml file.
-        Calls :meth:`update` with the parsed yaml data and will raise the same exceptions.
-        """
+    def read_file(self, f: typing.TextIO, context: typing.Optional[str] = None) -> None:
         configuration = yaml_loader(f, Loader=YamlLoader)
         self.update(configuration)
 
     def set(self, section: str, option: str, value: typing.Any) -> None:
-        """
-        Set a configuration value.
-
-        :param section: The section to set the value in.
-        :param option: The option to set.
-        :param value: The value to set.
-        """
         self._sections[section][option] = value
 
     def add_section(self, section_name: str) -> None:
-        """Add a section to the configuration.
-
-        Sections are top-level containers that contain key/value pairs of configuration of a single
-        language type.
-
-        :param section_name: The name of the language section. This must adhere to the :data:`SECTION_NAME_PATTERN`
-            pattern.
-
-        .. invisible-code-block: python
-
-            from nunavut.lang import LanguageConfig
-
-            config = LanguageConfig()
-
-            try:
-                config.add_section(53)
-                assert "add_section must throw TypeError if given non-string key."
-            except TypeError:
-                pass
-
-            try:
-                config.add_section("foo")
-                assert "add_section must throw ValueError if given an invalid string name."
-            except ValueError:
-                pass
-
-            config.add_section("nunavut.lang.c")
-
-            try:
-                config.add_section("nunavut.lang.c")
-                assert "add_section must throw ValueError if section redefinition is attempted."
-            except ValueError:
-                pass
-
-        """
         if not isinstance(section_name, str):
             raise TypeError("section names must be strings")
-        if not self.SECTION_NAME_PATTERN.match(section_name):
-            raise ValueError(f'Section name "{section_name}" is invalid. See LanguageConfig documentation for rules.')
+        if not self._section_name_pattern.match(section_name):
+            raise ValueError(
+                'Section name "{}" is invalid. See LanguageConfig documentation for rules.'.format(section_name)
+            )
         if section_name in self._sections:
-            raise ValueError(f"Section {section_name} is already defined.")
-        self._sections[section_name] = {}
+            raise ValueError("Section {} is already defined.".format(section_name))
+        self._sections[section_name] = dict()
 
     _UNSET = object()  # Used internally to allow "None" as a default value.
 
-    @no_default_value
     def _get_config_value_raw(self, section_name: str, key: str, default_value: typing.Any) -> typing.Any:
         """
         .. invisible-code-block: python
-
             from nunavut.lang import LanguageConfig
 
         .. code-block: python
@@ -351,13 +287,15 @@ class LanguageConfig:
         except KeyError:
             if default_value is not self._UNSET:
                 return default_value
-            raise
+            else:
+                raise
         try:
             return section_data[key]
         except KeyError:
             if default_value is not self._UNSET:
                 return default_value
-            raise
+            else:
+                raise
 
     def get_config_value(self, section_name: str, key: str, default_value: typing.Optional[str] = None) -> str:
         """
@@ -365,15 +303,14 @@ class LanguageConfig:
 
         :param section_name : The name of the section to get the value from.
         :param str key      : The config value to retrieve.
-        :param default_value: The value to return if the key was not in the configuration. If provided this method will\
-                              not raise.
+        :param default_value: The value to return if the key was not in the configuration. If provided
+            this method will not raise.
         :type default_value : typing.Optional[str]
         :return: Either the value from the config or the default_value if provided.
         :rtype: str
         :raises: KeyError if the section or the key in the section does not exist and a default_value was not provided.
 
-        .. invisible-code-block: python
-
+         .. invisible-code-block: python
             from nunavut.lang import LanguageConfig
 
         .. code-block: python
@@ -474,7 +411,8 @@ class LanguageConfig:
         result = self.get_config_value(section_name, key, default_value="false" if not default_value else "true")
         if result.lower() == "false" or result == "0":
             return False
-        return bool(result)
+        else:
+            return bool(result)
 
     def get_config_value_as_dict(
         self, section_name: str, key: str, default_value: typing.Optional[typing.Dict] = None
@@ -527,8 +465,8 @@ class LanguageConfig:
 
         :param str section_name : The name of the section to get the key from.
         :param str key          : The config value to retrieve.
-        :param default_value    : The value to return if the key was not in the configuration. If provided this method\
-                                  will not raise a KeyError nor a TypeError.
+        :param default_value    : The value to return if the key was not in the configuration. If provided this method
+            will not raise a KeyError nor a TypeError.
         :type default_value     : typing.Optional[typing.Mapping[str, typing.Any]]
         :return                 : Either the value from the config or the default_value if provided.
         :rtype                  : typing.Mapping[str, typing.Any]
@@ -543,14 +481,15 @@ class LanguageConfig:
             return raw_value
 
         if default_value is None:
-            raise TypeError(f"{section_name}.{key} exists but is not a dict. (is type {type(raw_value)})")
+            raise TypeError("{}.{} exists but is not a dict. (is type {})".format(section_name, key, type(raw_value)))
 
         return default_value
 
     def get_config_value_as_list(
         self, section_name: str, key: str, default_value: typing.Optional[typing.List] = None
     ) -> typing.List[typing.Any]:
-        """Get a language property parsing it as a map with string keys.
+        """
+        Get a language property parsing it as a map with string keys.
 
         Example:
 
@@ -597,8 +536,8 @@ class LanguageConfig:
 
         :param str section_name : The name of the section to get the key from.
         :param str key          : The config value to retrieve.
-        :param default_value    : The value to return if the key was not in the configuration. If provided this method\
-                                  will not raise a KeyError nor a TypeError.
+        :param default_value    : The value to return if the key was not in the configuration. If provided this method
+            will not raise a KeyError nor a TypeError.
         :type default_value     : typing.Optional[typing.List[typing.Any]]
         :return                 : Either the value from the config or the default_value if provided.
         :rtype                  : typing.List[typing.Any]
@@ -613,7 +552,7 @@ class LanguageConfig:
             return raw_value
 
         if default_value is None:
-            raise TypeError(f"{section_name}.{key} exists but is not a list. (is type {type(raw_value)})")
+            raise TypeError("{}.{} exists but is not a list. (is type {})".format(section_name, key, type(raw_value)))
 
         return default_value
 
@@ -625,59 +564,45 @@ class LanguageConfig:
 
 class VersionReader:
     """
-    Helper to read an "x.y.z" semantic version from python modules as a module variable `MODULE_VERSION_ATTRIBUTE_NAME`.
-    :param module_name: The name of the module to read the version from.
+    Helper to read an "x.y.z" semantic version from python modules as a module variable
+    "__version__"
     """
 
     MODULE_VERSION_ATTRIBUTE_NAME = "__version__"
 
     @classmethod
     def parse_version(cls, version_string: str) -> typing.Optional[typing.Tuple[int, int, int]]:
-        """
-        Parse a version string into a tuple of (major, minor, patch).
-        :param version_string: The version string to parse.
-        :return: The version as a tuple of (major, minor, patch) or None if the version string is not in the expected
-                 format.
-        """
         version_array = [int(x) for x in version_string.split(".")]
         if len(version_array) != 3:
             return None
-        return (version_array[0], version_array[1], version_array[2])
+        else:
+            return (version_array[0], version_array[1], version_array[2])
 
     @classmethod
     def read_version(cls, module: "types.ModuleType") -> typing.Tuple[int, int, int]:
-        """
-        Read the version from a module.
-
-        :param module: The module to read the version from.
-        :return: The version as a tuple of (major, minor, patch).
-        :raises: ValueError if the version is not in the expected format.
-        """
-        version: str = getattr(module, cls.MODULE_VERSION_ATTRIBUTE_NAME, "0.0.0")
+        version = getattr(module, cls.MODULE_VERSION_ATTRIBUTE_NAME, "0.0.0")  # type: str
 
         version_tuple = cls.parse_version(version)
         if version_tuple is None:
-            raise ValueError(
-                f'Invalid {cls.MODULE_VERSION_ATTRIBUTE_NAME} "{version}" for module {module.__name__}'
-                '(expected "x.y.z")'
+            raise RuntimeError(
+                'Invalid {} "{}" for module {} (expected "x.y.z")'.format(
+                    cls.MODULE_VERSION_ATTRIBUTE_NAME, version, module.__name__
+                )
             )
         return version_tuple
 
     def __init__(self, module_name: str):
         self._module_name = module_name
-        self._cached: typing.Optional[typing.Tuple[int, int, int]] = None
+        self._cached = None  # type: typing.Optional[typing.Tuple[int, int, int]]
 
     @property
     def version(self) -> typing.Tuple[int, int, int]:
-        """
-        The version of the module as a tuple of (major, minor, patch).
-        """
         if self._cached is None:
             self._cached = self._get_version()
         return self._cached
 
     def _get_version(self) -> typing.Tuple[int, int, int]:
-        import importlib  # pylint: disable=import-outside-toplevel
+        import importlib
 
         try:
             return self.read_version(importlib.import_module(self._module_name))

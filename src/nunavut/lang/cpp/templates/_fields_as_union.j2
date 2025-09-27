@@ -1,6 +1,6 @@
 {#-
  # Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
- # Copyright (C) 2021  OpenCyphal Development Team  <opencyphal.org>
+ # Copyright (C) 2021  UAVCAN Development Team  <uavcan.org>
  # This software is distributed under the terms of the MIT License.
 #}
     class VariantType final
@@ -16,7 +16,7 @@
         } internal_union_value_;
 
     public:
-        static const constexpr std::size_t variant_npos = std::numeric_limits<std::size_t>::max();
+        static const constexpr std::size_t variant_npos = -1;
 
         VariantType()
             : tag_(0)

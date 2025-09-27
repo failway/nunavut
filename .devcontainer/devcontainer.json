@@ -1,23 +1,21 @@
 {
     "name": "Python dev environment",
-    "image": "ghcr.io/opencyphal/toxic:tx22.4.2",
+    "dockerFile": "python.Dockerfile",
+    "context": "..",
+    "settings": {
+        "terminal.integrated.shell.linux": "/bin/bash"
+    },
     "workspaceFolder": "/workspace",
     "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
     "mounts": [
-        "source=root-vscode-server,target=/root/.vscode-server/extensions,type=volume"
+        "source=root-vscode-server,target=/root/.vscode-server/extensions,type=volume",
+        "source=nunavut-tox,target=/workspace/.tox,type=volume"
     ],
-    "customizations": {
-        "vscode": {
-            "extensions": [
-                "uavcan.dsdl",
-                "wholroyd.jinja",
-                "streetsidesoftware.code-spell-checker",
-                "ms-python.python",
-                "ms-python.mypy-type-checker",
-                "ms-python.black-formatter",
-                "ms-python.pylint"
-            ]
-        }
-    },
+    "extensions": [
+        "uavcan.dsdl",
+        "wholroyd.jinja",
+        "ban.spellright",
+        "ms-python.python"
+    ],
     "postCreateCommand": "git submodule update --init --recursive && tox -e local"
 }

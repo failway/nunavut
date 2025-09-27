@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 #
-# Copyright (C) OpenCyphal Development Team  <opencyphal.org>
-# Copyright Amazon.com Inc. or its affiliates.
-# SPDX-License-Identifier: MIT
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright (C) 2018-2021  UAVCAN Development Team  <uavcan.org>
+# This software is distributed under the terms of the MIT License.
 #
 """
     Command-line helper for running verification builds.
@@ -64,7 +64,10 @@ def _make_parser() -> argparse.ArgumentParser:
             platform: native32
             toolchain-family: gcc
 
-    """[1:]),
+    """[
+                1:
+            ]
+        ),
     )
 
     build_args = parser.add_argument_group(
@@ -73,7 +76,10 @@ def _make_parser() -> argparse.ArgumentParser:
             """
         Arguments that can be used in parallel builds. Each of these will change
         the name of the build directory created for the build.
-    """[1:]),
+    """[
+                1:
+            ]
+        ),
     )
 
     build_args.add_argument(
@@ -81,13 +87,16 @@ def _make_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=textwrap.dedent(
             """
-        Print out the version number (stored in src/nunavut/_version.py) only and exit. This number
+        Print out the version number (stored in src/nunavut/version.py) only and exit. This number
         will be the only output to stdout allowing build scripts to extract this string value for
         use in the build environment. For example:
 
-            export NUNAVUT_FULL_VERSION=$(./_verify.py --version-only)
+            export NUNAVUT_FULL_VERSION=$(./verify.py --version-only)
 
-    """[1:]),
+    """[
+                1:
+            ]
+        ),
     )
 
     build_args.add_argument(
@@ -95,25 +104,16 @@ def _make_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=textwrap.dedent(
             """
-        Print out the major and minor version number (stored in src/nunavut/_version.py) only and exit.
+        Print out the major and minor version number (stored in src/nunavut/version.py) only and exit.
         This number will be the only output to stdout allowing build scripts to extract this string
         value for use in the build environment. For example:
 
-            export NUNAVUT_MAJOR_MINOR_VERSION=$(./_verify.py --major-minor-version-only)
+            export NUNAVUT_MAJOR_MINOR_VERSION=$(./verify.py --major-minor-version-only)
 
-    """[1:]),
-    )
-
-    build_args.add_argument(
-        "--version-check-only",
-        help=textwrap.dedent(
-            """
-        Compares a given semantic version number with the current Nunavut version
-        (stored in src/nunavut/_version.py) and returns 0 if it matches else returns 1.
-
-            if $(./_verify.py --version-check-only 1.0.2); then echo "match"; fi
-
-    """[1:]),
+    """[
+                1:
+            ]
+        ),
     )
 
     build_args.add_argument("-l", "--language", default="c", help="Value for NUNAVUT_VERIFICATION_LANG (defaults to c)")
@@ -148,7 +148,10 @@ def _make_parser() -> argparse.ArgumentParser:
             """
         Select the toolchain family to use. Use "none" to get the toolchain
         from the environment (i.e. set CC and CXX environment variables).
-                        """[1:]),
+                        """[
+                1:
+            ]
+        ),
     )
 
     build_args.add_argument(
@@ -158,7 +161,10 @@ def _make_parser() -> argparse.ArgumentParser:
             """
         Dummy argument used to support matrix builds where an argument present
         in other builds is not provided in the current build.
-            """[1:]),
+            """[
+                1:
+            ]
+        ),
     )
 
     action_args = parser.add_argument_group(
@@ -166,7 +172,10 @@ def _make_parser() -> argparse.ArgumentParser:
         description=textwrap.dedent(
             """
         Arguments that change the actions taken by the build.
-    """[1:]),
+    """[
+                1:
+            ]
+        ),
     )
 
     action_args.add_argument("-v", "--verbose", action="count", default=0, help="Set output verbosity.")
@@ -181,7 +190,10 @@ def _make_parser() -> argparse.ArgumentParser:
 
         ** WARNING ** This will delete the cmake build directory!
 
-    """[1:]),
+    """[
+                1:
+            ]
+        ),
     )
 
     action_args.add_argument("-c", "--configure-only", action="store_true", help="Configure but do not build.")
@@ -201,28 +213,17 @@ def _make_parser() -> argparse.ArgumentParser:
             """
         Don't actually do anything. Just log what this script would have done.
         Combine with --verbose to ensure you actually see the script's log output.
-    """[1:]),
+    """[
+                1:
+            ]
+        ),
     )
 
     action_args.add_argument(
         "-x",
         "--no-coverage",
         action="store_true",
-        help="Deprecated. Use compiler_flag_set instead.",
-    )
-
-    action_args.add_argument(
-        "-cfs",
-        "--compiler-flag-set",
-        default="native",
-        type=pathlib.Path,
-        help=textwrap.dedent(
-            """
-        Select the compiler flag set to use. This will select the appropriate compiler flags
-        for the build. The default is 'native' which is the default compiler flags for the
-        build environment. Use 'native_w_cov' to enable coverage flags.
-        See cmake/compiler_flag_sets for available options.
-    """[1:]),
+        help="Disables generation of test coverage data. This is enabled by default.",
     )
 
     action_args.add_argument(
@@ -236,7 +237,10 @@ def _make_parser() -> argparse.ArgumentParser:
 
         Note: This only applies to the configure step. If you do a build-only this
         argument has no effect.
-    """[1:]),
+    """[
+                1:
+            ]
+        ),
     )
 
     other_options = parser.add_argument_group(
@@ -244,7 +248,10 @@ def _make_parser() -> argparse.ArgumentParser:
         description=textwrap.dedent(
             """
         Additional arguments for modifying how the build runs but which are used less frequently.
-    """[1:]),
+    """[
+                1:
+            ]
+        ),
     )
 
     other_options.add_argument(
@@ -264,34 +271,32 @@ def _make_parser() -> argparse.ArgumentParser:
             """
         We use Ninja by default. Set this flag to omit the explicit generator override
         and use whatever the default is for cmake (i.e. normally make)
-    """[1:]),
+    """[
+                1:
+            ]
+        ),
     )
 
     return parser
 
 
 def _apply_overrides(args: argparse.Namespace) -> argparse.Namespace:
-    if args.override is None:
-        return args
-
-    for override_list in args.override:
-        for override in override_list:
-            if not pathlib.Path(override).exists():
-                raise RuntimeError(f'ini file "{override}" does not exist.')
+    if args.override is not None:
+        for override in args.override:
             print(
                 textwrap.dedent(
-                    f"""
+                    """
             *****************************************************************
-            About to apply override file : {override}
+            About to apply override file : {}
             *****************************************************************
             """
-                )
+                ).format(str(override))
             )
 
             overrides = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
             overrides.read(override)
             if "overrides" not in overrides:
-                raise RuntimeError(f'ini file "{override}" did not contain an overrides section.')
+                raise RuntimeError('ini file "{}" did not contain an overrides section.'.format(str(override)))
             for key, value in overrides["overrides"].items():
                 corrected_key = key.replace("-", "_")
                 if value.lower() == "true" or value.lower() == "false":
@@ -338,11 +343,11 @@ def _cmake_run(
         logging.debug("        Using Environment:")
         for key, value in copy_of_env.items():
             overridden = key in env if env is not None else False
-            logging.debug("            %s = %s%s", key, value, (" (override)" if overridden else ""))
+            logging.debug("            {} = {}{}".format(key, value, (" (override)" if overridden else "")))
         logging.debug("        *****************************************************************\n")
 
     if not dry_run:
-        return subprocess.run(cmake_args, cwd=cmake_dir, env=copy_of_env, check=True).returncode
+        return subprocess.run(cmake_args, cwd=cmake_dir, env=copy_of_env).returncode
     else:
         return 0
 
@@ -355,7 +360,7 @@ def _handle_build_dir(args: argparse.Namespace, cmake_dir: pathlib.Path) -> None
     if args.remove_first and cmake_dir.exists():
         okay_to_remove = False
         if not args.force:
-            response = input(f"Are you sure you want to delete {cmake_dir}? [y/N]:")
+            response = input("Are you sure you want to delete {}? [y/N]:".format(cmake_dir))
             if (len(response) == 1 and response.lower() == "y") or (len(response) == 3 and response.lower() == "yes"):
                 okay_to_remove = True
         else:
@@ -363,10 +368,10 @@ def _handle_build_dir(args: argparse.Namespace, cmake_dir: pathlib.Path) -> None
 
         if okay_to_remove:
             if not args.dry_run:
-                logging.info("Removing directory %s", cmake_dir)
+                logging.info("Removing directory {}".format(cmake_dir))
                 shutil.rmtree(cmake_dir)
             else:
-                logging.info("Is dry-run. Would have removed directory %s", cmake_dir)
+                logging.info("Is dry-run. Would have removed directory {}".format(cmake_dir))
         else:
             raise RuntimeError(
                 """
@@ -380,12 +385,12 @@ def _handle_build_dir(args: argparse.Namespace, cmake_dir: pathlib.Path) -> None
 
     if not cmake_dir.exists():
         if not args.dry_run:
-            logging.info("Creating build directory at %s", cmake_dir)
+            logging.info("Creating build directory at {}".format(cmake_dir))
             cmake_dir.mkdir()
         else:
-            logging.info("Dry run: Would have created build directory at %s", cmake_dir)
+            logging.info("Dry run: Would have created build directory at {}".format(cmake_dir))
     else:
-        logging.info("Using existing build directory at %s", cmake_dir)
+        logging.info("Using existing build directory at {}".format(cmake_dir))
 
 
 def _cmake_configure(args: argparse.Namespace, cmake_args: typing.List[str], cmake_dir: pathlib.Path) -> int:
@@ -412,20 +417,20 @@ def _cmake_configure(args: argparse.Namespace, cmake_args: typing.List[str], cma
 
     cmake_configure_args = cmake_args.copy()
 
-    cmake_configure_args.append(f"--log-level={cmake_logging_level}")
-    cmake_configure_args.append(f"-DNUNAVUT_VERIFICATION_LANG={args.language}")
+    cmake_configure_args.append("--log-level={}".format(cmake_logging_level))
+    cmake_configure_args.append("-DNUNAVUT_VERIFICATION_LANG={}".format(args.language))
 
     if args.language_standard is not None:
-        cmake_configure_args.append(f"-DNUNAVUT_VERIFICATION_LANG_STANDARD={args.language_standard}")
+        cmake_configure_args.append("-DNUNAVUT_VERIFICATION_LANG_STANDARD={}".format(args.language_standard))
 
     if args.build_type is not None:
-        cmake_configure_args.append(f"-DCMAKE_BUILD_TYPE={args.build_type}")
+        cmake_configure_args.append("-DCMAKE_BUILD_TYPE={}".format(args.build_type))
 
     if args.endianness is not None:
-        cmake_configure_args.append(f"-DNUNAVUT_VERIFICATION_TARGET_ENDIANNESS={args.endianness}")
+        cmake_configure_args.append("-DNUNAVUT_VERIFICATION_TARGET_ENDIANNESS={}".format(args.endianness))
 
     if args.platform is not None:
-        cmake_configure_args.append(f"-DNUNAVUT_VERIFICATION_TARGET_PLATFORM={args.platform}")
+        cmake_configure_args.append("-DNUNAVUT_VERIFICATION_TARGET_PLATFORM={}".format(args.platform))
 
     if args.disable_asserts:
         cmake_configure_args.append("-DNUNAVUT_VERIFICATION_SER_ASSERT:BOOL=OFF")
@@ -440,14 +445,12 @@ def _cmake_configure(args: argparse.Namespace, cmake_args: typing.List[str], cma
         cmake_configure_args.append("-DCMAKE_VERBOSE_MAKEFILE:BOOL=ON")
 
     flag_set_dir = pathlib.Path("cmake") / pathlib.Path("compiler_flag_sets")
-    flagset_file = (flag_set_dir / args.compiler_flag_set).with_suffix(".cmake")
-    compiler_flag_set = (pathlib.Path(args.verification_dir) / flagset_file).resolve()
-    if not compiler_flag_set.exists():
-        raise RuntimeError(
-            f"Compiler flag set file {str(compiler_flag_set)} does not exist in the verification directory."
-        )
+    if args.no_coverage:
+        flagset_file = (flag_set_dir / pathlib.Path("native")).with_suffix(".cmake")
+    else:
+        flagset_file = (flag_set_dir / pathlib.Path("native_w_cov")).with_suffix(".cmake")
 
-    cmake_configure_args.append(f"-DNUNAVUT_FLAGSET={str(compiler_flag_set)}")
+    cmake_configure_args.append("-DNUNAVUT_FLAGSET={}".format(str(flagset_file)))
 
     if args.toolchain_family != "none":
         toolchain_dir = pathlib.Path("cmake") / pathlib.Path("toolchains")
@@ -456,7 +459,7 @@ def _cmake_configure(args: argparse.Namespace, cmake_args: typing.List[str], cma
         else:
             toolchain_file = toolchain_dir / pathlib.Path("gcc-native").with_suffix(".cmake")
 
-        cmake_configure_args.append(f"-DCMAKE_TOOLCHAIN_FILE={str(toolchain_file)}")
+        cmake_configure_args.append("-DCMAKE_TOOLCHAIN_FILE={}".format(str(toolchain_file)))
 
     if not args.use_default_generator:
         cmake_configure_args.append("-DCMAKE_GENERATOR=Ninja")
@@ -477,7 +480,7 @@ def _cmake_build(args: argparse.Namespace, cmake_args: typing.List[str], cmake_d
         cmake_build_args += ["--build", ".", "--target", "all"]
 
         if args.jobs is not None and args.jobs > 0:
-            cmake_build_args += ["--", f"-j{args.jobs}"]
+            cmake_build_args += ["--", "-j{}".format(args.jobs)]
 
         return _cmake_run(cmake_build_args, cmake_dir, args.verbose, args.dry_run)
 
@@ -494,10 +497,10 @@ def _cmake_test(args: argparse.Namespace, cmake_args: typing.List[str], cmake_di
 
         cmake_test_args += ["--build", ".", "--target"]
 
-        if args.compiler_flag_set.stem == "native_w_cov":
-            cmake_test_args.append("cov_all_archive")
-        else:
+        if args.no_coverage:
             cmake_test_args.append("test_all")
+        else:
+            cmake_test_args.append("cov_all_archive")
 
         return _cmake_run(cmake_test_args, cmake_dir, args.verbose, args.dry_run)
 
@@ -505,21 +508,21 @@ def _cmake_test(args: argparse.Namespace, cmake_args: typing.List[str], cmake_di
 
 
 def _create_build_dir_name(args: argparse.Namespace) -> str:
-    name = f"build_{args.language}"
+    name = "build_{}".format(args.language)
 
     if args.language_standard is not None:
-        name += f"_{args.language_standard}"
+        name += "_{}".format(args.language_standard)
 
-    name += f"_{args.toolchain_family}"
+    name += "_{}".format(args.toolchain_family)
 
     if args.platform is not None:
-        name += f"_{args.platform}"
+        name += "_{}".format(args.platform)
 
     if args.build_type is not None:
-        name += f"_{args.build_type}"
+        name += "_{}".format(args.build_type)
 
     if args.endianness is not None:
-        name += f"_{args.endianness}"
+        name += "_{}".format(args.endianness)
 
     if args.disable_asserts:
         name += "_noassert"
@@ -535,10 +538,10 @@ def _create_build_dir_name(args: argparse.Namespace) -> str:
 
 @functools.lru_cache(maxsize=None)
 def _get_version_string() -> typing.Tuple[str, str, str]:
-    with open("src/nunavut/_version.py", "r", encoding="UTF-8") as version_py:
-        exec(version_py.read())  # pylint: disable=exec-used
+    with open("src/nunavut/version.py", "r") as version_py:
+        exec(version_py.read())
 
-    version_string = typing.cast(str, eval("__version__"))  # pylint: disable=eval-used
+    version_string = typing.cast(str, eval("__version__"))
     version_array = version_string.split(".")
     return (version_array[0], version_array[1], version_array[2])
 
@@ -556,7 +559,7 @@ def main() -> int:
 
     if args.major_minor_version_only:
         version = _get_version_string()
-        sys.stdout.write(f"{version[0]}.{version[1]}")
+        sys.stdout.write("{}.{}".format(version[0], version[1]))
         sys.stdout.flush()
         return 0
 
@@ -568,15 +571,6 @@ def main() -> int:
         logging_level = logging.DEBUG
 
     logging.basicConfig(format="%(levelname)s: %(message)s", level=logging_level)
-
-    if args.version_check_only is not None:
-        version_as_string = ".".join(_get_version_string())
-        logging.debug(
-            "Comparing nunavut version %s to provided version %s (%s)",
-                version_as_string,
-                args.version_check_only,
-                "matches" if (version_as_string == args.version_check_only) else "no-match")
-        return 0 if (version_as_string == args.version_check_only) else 1
 
     logging.debug(
         textwrap.dedent(

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 OpenCyphal Development Team.
+ * Copyright (c) 2022 UAVCAN Development Team.
  * Authors: Pavel Pletenev <cpp.create@gmail.com>
  * This software is distributed under the terms of the MIT License.
  *
@@ -9,13 +9,14 @@
 #include "gmock/gmock.h"
 #include "nunavut/support/serialization.hpp"
 
-inline testing::Message& operator<<(testing::Message& s, const nunavut::support::Error& e){
+testing::Message& operator<<(testing::Message& s, const nunavut::support::Error& e){
     using namespace nunavut::support;
     switch(e){
-    case Error::SerializationBufferTooSmall: s << "SerializationBufferTooSmall"; break;
-    case Error::SerializationBadArrayLength: s << "SerializationBadArrayLength"; break;
-    case Error::RepresentationBadUnionTag: s << "RepresentationBadUnionTag"; break;
-    case Error::RepresentationBadDelimiterHeader: s << "RepresentationBadDelimiterHeader"; break;
+    case Error::SERIALIZATION_INVALID_ARGUMENT: s << "SERIALIZATION_INVALID_ARGUMENT"; break;
+    case Error::SERIALIZATION_BUFFER_TOO_SMALL: s << "SERIALIZATION_BUFFER_TOO_SMALL"; break;
+    case Error::REPRESENTATION_BAD_ARRAY_LENGTH: s << "REPRESENTATION_BAD_ARRAY_LENGTH"; break;
+    case Error::REPRESENTATION_BAD_UNION_TAG: s << "REPRESENTATION_BAD_UNION_TAG"; break;
+    case Error::REPRESENTATION_BAD_DELIMITER_HEADER: s << "REPRESENTATION_BAD_DELIMITER_HEADER"; break;
     }
     return s;
 }
@@ -106,7 +107,7 @@ inline double randF64(void)
     return static_cast<double>(randI64());
 }
 
-inline ::testing::AssertionResult CompareFloatsNear(float f1, float f2, float delta) {
+::testing::AssertionResult CompareFloatsNear(float f1, float f2, float delta) {
   if (std::abs(f1-f2) < delta)
     return testing::AssertionSuccess();
   else

@@ -1,12 +1,8 @@
 #
-# Copyright (C) OpenCyphal Development Team  <opencyphal.org>
-# Copyright Amazon.com Inc. or its affiliates.
-# SPDX-License-Identifier: MIT
+# Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright (C) 2018-2021  UAVCAN Development Team  <uavcan.org>
+# This software is distributed under the terms of the MIT License.
 #
-"""
-Contains template loaders for Nunavut's Jinja2 environment.
-"""
-
 import collections
 import importlib
 import logging
@@ -15,13 +11,13 @@ import typing
 
 import pydsdl
 
-from nunavut._utilities import ResourceSearchPolicy, TEMPLATE_SUFFIX
-from nunavut.lang._config import VersionReader
-
+from ..lang._config import VersionReader
 from .jinja2 import BaseLoader, Environment, FileSystemLoader, PackageLoader, TemplateNotFound
 
 logger = logging.getLogger(__name__)
 
+
+TEMPLATE_SUFFIX = ".j2"  #: The suffix expected for Jinja templates.
 
 DEFAULT_TEMPLATE_PATH = "templates"
 
@@ -46,9 +42,6 @@ class DSDLTemplateLoader(BaseLoader):
         then no :class:`nunavut.jinja.jinja2.PackageLoader` is created.
     :param str builtin_template_path: The name of the package under the ``package_name_for_templates`` package to load
         templates from. This is ignored if ``package_name_for_templates`` is None.
-    :param search_policy: If set to "FIND_ALL" then this loader will search using all loaders and will enumerate
-                          templates from all loaders. If set to "FIND_FIRST" then the loader will only use the first
-                          loader configure for both search and enumeration.
     :param Any kwargs: Arguments forwarded to the :class:`jinja.jinja2.BaseLoader`.
     """
 
@@ -58,30 +51,27 @@ class DSDLTemplateLoader(BaseLoader):
         followlinks: bool = False,
         package_name_for_templates: typing.Optional[str] = None,
         builtin_template_path: str = DEFAULT_TEMPLATE_PATH,
-        search_policy: ResourceSearchPolicy = ResourceSearchPolicy.FIND_ALL,
-        **kwargs: typing.Any,
+        **kwargs: typing.Any
     ):
         super().__init__(**kwargs)
-        self._type_to_template_lookup_cache: typing.Dict[pydsdl.Any, pathlib.Path] = dict()
+        self._type_to_template_lookup_cache = dict()  # type: typing.Dict[pydsdl.Any, pathlib.Path]
+        self._templates_package_name = None  # type: typing.Optional[str]
 
         if templates_dirs is not None:
             for templates_dir_item in templates_dirs:
-                if not templates_dir_item.exists():
-                    raise ValueError(f"Templates directory {str(templates_dir_item)} did not exist?")
-            logger.info("Loading templates from file system at %s", templates_dirs)
+                if not pathlib.Path(templates_dir_item).exists:
+                    raise ValueError("Templates directory {} did not exist?".format(templates_dir_item))
+            logger.info("Loading templates from file system at {}".format(templates_dirs))
             self._fsloader = FileSystemLoader((str(d) for d in templates_dirs), followlinks=followlinks)
         else:
             self._fsloader = None
 
-        if package_name_for_templates is not None and (
-            search_policy == ResourceSearchPolicy.FIND_ALL or self._fsloader is None
-        ):
+        if package_name_for_templates is not None:
             logger.info("Loading templates from package {}.{}".format(builtin_template_path, builtin_template_path))
             self._package_loader = PackageLoader(package_name_for_templates, package_path=builtin_template_path)
             self._templates_package_name = "{}.{}".format(package_name_for_templates, builtin_template_path)
         else:
             self._package_loader = None
-            self._templates_package_name = ""
 
     def get_source(
         self, environment: Environment, template: str
@@ -111,8 +101,7 @@ class DSDLTemplateLoader(BaseLoader):
 
         .. invisible-code-block: python
 
-            from nunavut.jinja.loaders import DSDLTemplateLoader
-            from nunavut._utilities import TEMPLATE_SUFFIX
+            from nunavut.jinja.loaders import DSDLTemplateLoader, TEMPLATE_SUFFIX
 
             template_loaders = DSDLTemplateLoader(package_name_for_templates='nunavut.lang.c')
 
@@ -152,8 +141,7 @@ class DSDLTemplateLoader(BaseLoader):
 
         .. invisible-code-block: python
 
-            from nunavut.jinja.loaders import DSDLTemplateLoader
-            from nunavut._utilities import TEMPLATE_SUFFIX
+            from nunavut.jinja.loaders import DSDLTemplateLoader, TEMPLATE_SUFFIX
 
             template_loaders = DSDLTemplateLoader(package_name_for_templates='nunavut.lang.c')
 
@@ -164,7 +152,6 @@ class DSDLTemplateLoader(BaseLoader):
             for template in templates:
                 if template.stem == 'StructureType':
                     structure_type = template
-                assert template.suffix == TEMPLATE_SUFFIX
 
             assert structure_type is not None
             assert structure_type.suffix == TEMPLATE_SUFFIX
@@ -174,9 +161,9 @@ class DSDLTemplateLoader(BaseLoader):
         files = set()
         if self._fsloader is not None:
             for template_dir in self._fsloader.searchpath:
-                for template in pathlib.Path(str(template_dir)).glob("**/*{}".format(TEMPLATE_SUFFIX)):
+                for template in pathlib.Path(template_dir).glob("**/*{}".format(TEMPLATE_SUFFIX)):
                     files.add(template)
-        if self._package_loader is not None:
+        if self._package_loader is not None and self._templates_package_name is not None:
             templates_module = importlib.import_module(self._templates_package_name)
             spec_perhaps = templates_module.__spec__
             file_perhaps = None  # type: typing.Optional[str]
@@ -185,7 +172,7 @@ class DSDLTemplateLoader(BaseLoader):
             if file_perhaps is None or file_perhaps == "builtin":
                 raise RuntimeError("Unknown template package origin?")
             templates_base_path = pathlib.Path(file_perhaps).parent
-            for t in self._filter_template_list_by_suffix(self._package_loader.list_templates()):
+            for t in self._package_loader.list_templates():
                 files.add(templates_base_path / pathlib.Path(t))
         return sorted(files)
 
@@ -203,7 +190,7 @@ class DSDLTemplateLoader(BaseLoader):
             template_name = l.type_to_template(pydsdl.StructureType)
 
             assert template_name is not None
-            assert template_name.name == 'StructureType.j2'
+            assert template_name.name == 'Any.j2'
 
         """
         template_path = None
@@ -225,7 +212,7 @@ class DSDLTemplateLoader(BaseLoader):
     # +----------------------------------------------------------------------------------------------------------------+
     @staticmethod
     def _filter_template_list_by_suffix(files: typing.List[str]) -> typing.List[str]:
-        return [f for f in files if pathlib.Path(f).suffix == TEMPLATE_SUFFIX]
+        return [f for f in files if (pathlib.Path(f).suffix == TEMPLATE_SUFFIX)]
 
     def _type_to_template_internal(
         self, value_type: typing.Type, templates: typing.Mapping[str, pathlib.Path]
@@ -245,9 +232,9 @@ class DSDLTemplateLoader(BaseLoader):
 
             try:
                 logging.debug(
-                    "NunavutTemplateLoader.type_to_template for %s: considering %s...",
-                    value_type.__name__,
-                    current_search_type.__name__,
+                    "NunavutTemplateLoader.type_to_template for {}: considering {}...".format(
+                        value_type.__name__, current_search_type.__name__
+                    )
                 )
                 template_path = templates[current_search_type.__name__]
                 self._type_to_template_lookup_cache[current_search_type] = template_path

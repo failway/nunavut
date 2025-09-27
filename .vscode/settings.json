@@ -1,17 +1,20 @@
 {
+    "python.pythonPath": ".tox/local/bin/python",
+    "python.linting.flake8Enabled": true,
+    "python.linting.pylintEnabled": false,
+    "python.linting.mypyEnabled": true,
+    "python.linting.pycodestyleEnabled": false,
+    "python.linting.enabled": true,
+    "python.linting.pycodestyleArgs": [
+        "--ignore",
+        "E501,E251,E701"
+    ],
     "python.testing.cwd": "${workspaceFolder}",
     "python.testing.unittestEnabled": false,
+    "python.testing.nosetestsEnabled": false,
     "python.testing.pytestEnabled": true,
-    "pylint.args": [
-        "--rcfile=${workspaceFolder}/tox.ini"
-    ],
-    "black-formatter.args": [
-        "--line-length=120"
-    ],
-    "mypy-type-checker.args": [
-        "--config-file=${workspaceFolder}/tox.ini"
-    ],
-    "flake8.args": [
+    "python.formatting.provider": "black",
+    "python.formatting.blackArgs": [
         "--line-length=120"
     ],
     "files.exclude": {
@@ -35,11 +38,11 @@
         "-DCMAKE_VERBOSE_MAKEFILE:BOOL=TRUE"
     ],
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "C_Cpp.configurationWarnings": "Disabled",
     "files.associations": {
         "*.py.template": "python",
-        "nunavut_support.j2": "python",
-        "*.cc": "cpp",
-        "*.hpp": "cpp",
+        "*.cc": "c++",
+        "*.hpp": "c++",
         "__bit_reference": "cpp",
         "__config": "cpp",
         "__debug": "cpp",
@@ -134,12 +137,11 @@
         "any": "cpp",
         "span": "cpp",
         "variant": "cpp",
-        "__bits": "cpp",
-        "filesystem": "cpp",
-        "__memory": "cpp",
-        "compare": "cpp",
-        "concepts": "cpp"
+        "__bits": "cpp"
     },
+    "python.linting.mypyArgs": [
+        "--config-file=${workspaceFolder}/tox.ini"
+    ],
     "editor.wordWrapColumn": 120,
     "editor.rulers": [
         120
@@ -148,6 +150,15 @@
     "files.insertFinalNewline": true,
     "files.trimFinalNewlines": true,
     "files.trimTrailingWhitespace": true,
+    "spellright.language": [
+        "en"
+    ],
+    "spellright.documentTypes": [
+        "markdown",
+        "latex",
+        "plaintext",
+        "cpp"
+    ],
     "testMate.cpp.test.advancedExecutables": [
         {
             "pattern": "verification/build_vscode/**/suite/{test,Test,TEST}_*",
@@ -172,21 +183,5 @@
         "env": "",
         "environment": "",
         "sourceFileMap": "${sourceFileMapObj}"
-    },
-    "cSpell.allowCompoundWords": true,
-    "cSpell.caseSensitive": false,
-    "cSpell.customDictionaries": {
-        "cyphal" : {
-            "name": "Cyphal-words",
-            "path": "${workspaceRoot}/cyphal-words.txt",
-            "description": "Words used in Cyphal and UAVCAN to add to spell checker dictionaries.",
-            "addWords": true
-          },
-          "nunavut" : {
-            "name": "Nunavut-words",
-            "path": "${workspaceRoot}/.vscode/nunavut-words.txt",
-            "description": "Words used in in the Nunavut codebase to add to spell checker dictionaries.",
-            "addWords": true
-          }
     }
 }

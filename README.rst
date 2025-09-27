@@ -36,9 +36,13 @@ and it can be used to generate code for other languages if custom templates (and
 Currently, the following languages are supported out of the box:
 
 - **C11** (generates header-only libraries)
-- **C++** (generates header-only libraries; `work-in-progress <https://github.com/OpenCyphal/nunavut/issues/91>`_)
-- **Python** (generates Python packages)
-- **HTML** (generates documentation pages)
+- **HTML** (generates documentation pages) (experimental support)
+
+The following languages are currently on the roadmap:
+
+- **Python** (already supported in `Pycyphal`_, pending
+  `transplantation into Nunavut <https://github.com/OpenCyphal/pycyphal/issues/110>`_)
+- **C++ 14 and newer** (generates header-only libraries; `work-in-progress <https://github.com/OpenCyphal/nunavut/issues/91>`_)
 
 Nunavut is named after the `Canadian territory`_. We chose the name because it
 is a beautiful word to say and read.
@@ -68,7 +72,7 @@ Nunavut is invoked to generate code for the former.
 
 .. code-block:: shell
 
-    nnvg --target-language c --enable-serialization-asserts public_regulated_data_types/reg --lookup-dir public_regulated_data_types/uavcan
+    nnvg --target-language c --target-endianness=little --enable-serialization-asserts public_regulated_data_types/reg --lookup-dir public_regulated_data_types/uavcan
 
 Generate HTML documentation pages using the command-line tool
 -------------------------------------------------------------
@@ -84,17 +88,6 @@ documentation sections.
     nnvg --experimental-languages --target-language html public_regulated_data_types/reg --lookup-dir public_regulated_data_types/uavcan
     nnvg --experimental-languages --target-language html public_regulated_data_types/uavcan
 
-Generate Python packages using the command-line tool
-----------------------------------------------------
-
-This example assumes that the public regulated namespace directories ``reg`` and ``uavcan`` reside under
-``public_regulated_data_types/``.
-Nunavut is invoked to generate code for the former.
-
-.. code-block:: shell
-
-    nnvg --target-language py public_regulated_data_types/reg --lookup-dir public_regulated_data_types/uavcan
-
 
 Use custom templates
 --------------------
@@ -104,7 +97,7 @@ Partial example: generating a C struct
 .. code-block:: jinja
 
        /*
-        * Cyphal data structure definition
+        * UAVCAN data structure definition
         *
         * Auto-generated, do not edit.
         *
@@ -170,7 +163,7 @@ The documentation for Nunavut is hosted on readthedocs.io:
 - `nunavut contributors guide`_ – Documentation for contributors to the Nunavut project.
 - `nunavut licenses`_ – Licenses and copyrights
 
-Nunavut is part of the OpenCyphal project:
+Nunavut is part of the UAVCAN project:
 
 - `OpenCyphal website`_
 - `OpenCyphal forum`_
